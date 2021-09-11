@@ -1,9 +1,9 @@
 module Availability.Getter (Getter (..), get, GetterKV (..), getKV, makeGetterFromLens, makeGetterKVFromLens) where
 
 import           Availability.Impl
-import           Control.Lens        ((^.))
-import qualified Control.Lens        as Lens
 import           Language.Haskell.TH (Dec, Exp, Q, Type)
+import           Lens.Micro          ((^.))
+import qualified Lens.Micro          as Lens
 
 data Getter tag s :: Effect where
   Get :: Getter tag s m s

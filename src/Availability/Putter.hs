@@ -3,9 +3,9 @@ module Availability.Putter (Putter (..), put, PutterKV (..), putKV, DeleterKV (.
 
 import           Availability.Getter
 import           Availability.Impl
-import           Control.Lens        ((&), (.~))
-import qualified Control.Lens        as Lens
 import           Language.Haskell.TH (Dec, Exp, Q, Type)
+import           Lens.Micro          ((&), (.~), (?~))
+import qualified Lens.Micro          as Lens
 
 data Putter tag s :: Effect where
   Put :: s -> Putter tag s m ()
@@ -58,5 +58,5 @@ makeDeleterKVFromLens tag ktyp vtyp otag otyp mnd =
     {-# INLINABLE unsafeSend #-}
     unsafeSend (DelKV k) = do
       s <- get @($otag) @($otyp)
-      put @($otag) @($otyp) (Lens.sans k s)
+      put @($otag) @($otyp) (s & Lens.at k .~ Nothing)
   |]

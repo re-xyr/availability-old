@@ -21,7 +21,7 @@ description:         Please see the README on GitHub at <https://github.com/dayl
 dependencies:
 - base
 - mtl
-- lens
+- microlens
 - exceptions
 - unliftio
 - template-haskell
