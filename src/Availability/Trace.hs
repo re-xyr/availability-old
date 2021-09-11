@@ -1,5 +1,6 @@
 module Availability.Trace (Trace, trace, makeTraceByIO, makeTraceByWriter) where
 
+import           Availability.Embed
 import           Availability.Impl
 import           Availability.Putter
 import           Language.Haskell.TH (Dec, Q, Type)

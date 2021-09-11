@@ -23,6 +23,7 @@ dependencies:
 - mtl
 - lens
 - exceptions
+- unliftio
 - template-haskell
 
 ghc-options:

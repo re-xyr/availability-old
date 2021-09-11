@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Availability.Example.Teletype.EchoIO where
 
+import           Availability.Embed
 import           Availability.Example.Teletype.Effect
 import           Availability.Impl
 import           Availability.MTL.TH

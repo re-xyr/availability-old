@@ -1,5 +1,6 @@
 module Availability.MTL.TH where
 
+import           Availability.Embed
 import           Availability.Error
 import           Availability.Impl
 import           Availability.Listener
@@ -10,6 +11,7 @@ import qualified Control.Monad.Reader  as MTL
 import qualified Control.Monad.State   as MTL
 import qualified Control.Monad.Writer  as MTL
 import           Language.Haskell.TH   (Dec, Q, Type)
+import           UnliftIO              (MonadUnliftIO (withRunInIO))
 
 makeEffViaMonadReader :: Q Type -> Q Type -> Q Type -> Q [Dec]
 makeEffViaMonadReader tag typ mnd =
@@ -93,4 +95,13 @@ makeEffViaMonadCatch typ mnd =
     type InTermsOf (Catcher $typ) $mnd = '[Underlying]
     {-# INLINE unsafeSend #-}
     unsafeSend (CatchError m h) = underlie $ MTL.catch (runM m) (runM . h)
+  |]
+
+makeEffViaMonadUnliftIO :: Q Type -> Q [Dec]
+makeEffViaMonadUnliftIO mnd =
+  [d|
+  instance Interpret (Unembed IO) $mnd where
+    type InTermsOf _ _ = '[Underlying]
+    {-# INLINE unsafeSend #-}
+    unsafeSend (WithUnembed f) = underlie $ withRunInIO \unlift -> f (unlift . runM)
   |]
