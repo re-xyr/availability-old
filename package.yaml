@@ -1,0 +1,68 @@
+name:                availability
+version:             0.1.0.0
+github:              "re-xyr/availability"
+license:             BSD3
+author:              "daylily"
+maintainer:          "xy.r@outlook.com"
+copyright:           "2021 daylily"
+
+extra-source-files:
+- README.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/daylily/availability#readme>
+
+dependencies:
+- base
+- mtl
+- optics
+- exceptions
+- template-haskell
+
+ghc-options:
+- -Wall
+- -Wincomplete-uni-patterns
+- -Wpartial-fields
+- -Wincomplete-record-updates
+- -Widentities
+
+library:
+  source-dirs: src
+
+tests:
+  availability-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - availability
+
+default-extensions:
+- AllowAmbiguousTypes
+- BlockArguments
+- ConstraintKinds
+- DataKinds
+- EmptyCase
+- FlexibleContexts
+- FlexibleInstances
+- GADTs
+- GeneralizedNewtypeDeriving
+- LambdaCase
+- MultiParamTypeClasses
+- PolyKinds
+- RankNTypes
+- ScopedTypeVariables
+- TemplateHaskell
+- TypeApplications
+- TypeFamilies
+- TypeOperators
+- UndecidableInstances
