@@ -1,10 +1,11 @@
 module Availability.State (module Availability.Getter, module Availability.Putter, state, modify, makeStateByIORef,
-                           makeStateFromLens, makeStateKVFromLens) where
+                           makeEffViaMonadState, makeStateFromLens, makeStateKVFromLens) where
 
 import           Availability.Embed
 import           Availability.Getter
 import           Availability.Impl
 import           Availability.Putter
+import qualified Control.Monad.State as MTL
 import           Data.IORef          (IORef)
 import           Language.Haskell.TH (Dec, Exp, Q, Type)
 
@@ -21,6 +22,20 @@ modify f = do
   x <- get @tag
   put @tag (f x)
 {-# INLINABLE modify #-}
+
+makeEffViaMonadState :: Q Type -> Q Type -> Q Type -> Q [Dec]
+makeEffViaMonadState tag typ mnd =
+  [d|
+  instance Interpret (Getter $tag $typ) $mnd where
+    type InTermsOf (Getter $tag $typ) $mnd = '[Underlying]
+    {-# INLINE unsafeSend #-}
+    unsafeSend Get = underlie MTL.get
+
+  instance Interpret (Putter $tag $typ) $mnd where
+    type InTermsOf (Putter $tag $typ) $mnd = '[Underlying]
+    {-# INLINE unsafeSend #-}
+    unsafeSend (Put x) = underlie $ MTL.put x
+  |]
 
 makeStateByIORef :: Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
 makeStateByIORef tag typ otag mnd =

@@ -73,14 +73,13 @@ One can implement a pure echoing program via `mtl`:
 
 ```haskell
 import           Availability.Fresh
-import           Availability.Getter
 import           Availability.Impl
-import           Availability.MTL.TH
-import           Availability.Putter
-import qualified Control.Monad.State           as MTL
-import qualified Control.Monad.Writer          as MTL
-import           Data.Function                 ((&))
-import           Data.Maybe                    (fromMaybe)
+import           Availability.State
+import           Availability.Writer
+import qualified Control.Monad.State                  as MTL
+import qualified Control.Monad.Writer                 as MTL
+import           Data.Function                        ((&))
+import           Data.Maybe                           (fromMaybe)
 
 type PureProgram = MTL.WriterT [String] (MTL.State [String])
 
@@ -108,8 +107,8 @@ runEchoPure s = runUnderlying @'[Teletype] echoPure & MTL.execWriterT & (`MTL.ev
 or an impure interpretation directly through `IO`.
 
 ```haskell
+import           Availability.Embed
 import           Availability.Impl
-import           Availability.MTL.TH
 
 makeEffViaMonadIO [t| IO |]
 

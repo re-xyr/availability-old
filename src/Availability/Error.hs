@@ -1,10 +1,10 @@
 module Availability.Error (Thrower (..), throwError, liftEither, Catcher (..), catchError, runError,
-                           makeThrowerByException, makeCatcherByUnembedIO) where
+                           makeEffViaMonadError, makeEffViaMonadThrow, makeEffViaMonadCatch) where
 
-import           Availability.Embed
 import           Availability.Impl
-import           Control.Exception   (catch, throw)
-import           Language.Haskell.TH (Dec, Q, Type)
+import qualified Control.Monad.Catch  as MTL
+import qualified Control.Monad.Except as MTL
+import           Language.Haskell.TH  (Dec, Q, Type)
 
 data Thrower e :: Effect where
   ThrowError :: e -> Thrower e m a
@@ -30,20 +30,34 @@ runError :: forall e m a. (Interprets '[Catcher e] m, Applicative m) =>
 runError m = rips @'[Thrower e, Catcher e] $ (Right <$> m) `catchError` \e -> pure (Left e)
 {-# INLINE runError #-}
 
-makeThrowerByException :: Q Type -> Q Type -> Q [Dec]
-makeThrowerByException typ mnd =
+makeEffViaMonadError :: Q Type -> Q Type -> Q [Dec]
+makeEffViaMonadError typ mnd =
   [d|
   instance Interpret (Thrower $typ) $mnd where
-    type InTermsOf _ _ = '[]
+    type InTermsOf (Thrower $typ) $mnd = '[Underlying]
     {-# INLINE unsafeSend #-}
-    unsafeSend (ThrowError e) = throw e
+    unsafeSend (ThrowError e) = underlie $ MTL.throwError e
+
+  instance Interpret (Catcher $typ) $mnd where
+    type InTermsOf (Catcher $typ) $mnd = '[Underlying]
+    {-# INLINE unsafeSend #-}
+    unsafeSend (CatchError m h) = underlie $ MTL.catchError (runM m) (runM . h)
   |]
 
-makeCatcherByUnembedIO :: Q Type -> Q Type -> Q [Dec]
-makeCatcherByUnembedIO typ mnd =
+makeEffViaMonadThrow :: Q Type -> Q Type -> Q [Dec]
+makeEffViaMonadThrow typ mnd =
+  [d|
+  instance Interpret (Thrower $typ) $mnd where
+    type InTermsOf (Thrower $typ) $mnd = '[Underlying]
+    {-# INLINE unsafeSend #-}
+    unsafeSend (ThrowError e) = underlie $ MTL.throwM e
+  |]
+
+makeEffViaMonadCatch :: Q Type -> Q Type -> Q [Dec]
+makeEffViaMonadCatch typ mnd =
   [d|
   instance Interpret (Catcher $typ) $mnd where
-    type InTermsOf _ _ = '[Unembed IO]
+    type InTermsOf (Catcher $typ) $mnd = '[Underlying]
     {-# INLINE unsafeSend #-}
-    unsafeSend (CatchError m h) = withUnembed \unembed -> catch @($typ) (unembed m) (unembed . h)
+    unsafeSend (CatchError m h) = underlie $ MTL.catch (runM m) (runM . h)
   |]

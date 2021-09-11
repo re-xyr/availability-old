@@ -3,10 +3,9 @@ module Availability.Example.Teletype.EchoPure where
 
 import           Availability.Example.Teletype.Effect
 import           Availability.Fresh
-import           Availability.Getter
 import           Availability.Impl
-import           Availability.MTL.TH
-import           Availability.Putter
+import           Availability.State
+import           Availability.Writer
 import qualified Control.Monad.State                  as MTL
 import qualified Control.Monad.Writer                 as MTL
 import           Data.Function                        ((&))

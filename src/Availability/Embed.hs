@@ -1,6 +1,9 @@
-module Availability.Embed (Embed (..), embed, Unembed (..), withUnembed) where
+module Availability.Embed (Embed (..), embed, Unembed (..), withUnembed, makeEffViaMonadIO,
+                           makeEffViaMonadUnliftIO) where
 
 import           Availability.Impl
+import           Language.Haskell.TH
+import qualified UnliftIO            as MTL
 
 data Embed (m' :: * -> *) :: Effect where
   Embed :: m' a -> Embed m' m a
@@ -15,3 +18,21 @@ data Unembed (m' :: * -> *) :: Effect where
 withUnembed :: forall m' m a b. Sendable (Unembed m') m => ((M m a -> m' a) -> m' b) -> M m b
 withUnembed f = send (WithUnembed f)
 {-# INLINE withUnembed #-}
+
+makeEffViaMonadIO :: Q Type -> Q [Dec]
+makeEffViaMonadIO mnd =
+  [d|
+  instance Interpret (Embed IO) $mnd where
+    type InTermsOf (Embed IO) $mnd = '[Underlying]
+    {-# INLINE unsafeSend #-}
+    unsafeSend (Embed m) = underlie $ MTL.liftIO m
+  |]
+
+makeEffViaMonadUnliftIO :: Q Type -> Q [Dec]
+makeEffViaMonadUnliftIO mnd =
+  [d|
+  instance Interpret (Unembed IO) $mnd where
+    type InTermsOf _ _ = '[Underlying]
+    {-# INLINE unsafeSend #-}
+    unsafeSend (WithUnembed f) = underlie $ MTL.withRunInIO \unlift -> f (unlift . runM)
+  |]
