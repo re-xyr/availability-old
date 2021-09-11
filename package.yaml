@@ -21,7 +21,7 @@ description:         Please see the README on GitHub at <https://github.com/dayl
 dependencies:
 - base
 - mtl
-- optics
+- lens
 - exceptions
 - template-haskell
 
@@ -31,6 +31,7 @@ ghc-options:
 - -Wpartial-fields
 - -Wincomplete-record-updates
 - -Widentities
+- -O2
 
 library:
   source-dirs: src
@@ -66,3 +67,4 @@ default-extensions:
 - TypeFamilies
 - TypeOperators
 - UndecidableInstances
+- UndecidableSuperClasses

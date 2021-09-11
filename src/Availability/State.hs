@@ -1,13 +1,12 @@
 module Availability.State (module Availability.Getter, module Availability.Putter, state, modify, makeStateByIORef,
-                           makeStateFromOptics, makeStateKVFromOptics) where
+                           makeStateFromLens, makeStateKVFromLens) where
 
+import           Availability.Embed
 import           Availability.Getter
 import           Availability.Impl
 import           Availability.Putter
 import           Data.IORef          (IORef)
-import           Language.Haskell.TH (Dec, Q, TExp, Type)
-import qualified Optics
-import           Unsafe.Coerce       (unsafeCoerce)
+import           Language.Haskell.TH (Dec, Exp, Q, Type)
 
 state :: forall tag s m a. (Sendable (Getter tag s) m, Sendable (Putter tag s) m, Monad m) => (s -> (a, s)) -> M m a
 state f = do
@@ -26,14 +25,14 @@ modify f = do
 makeStateByIORef :: Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
 makeStateByIORef tag typ otag mnd =
   [d|
-  instance Monad m => Interpret (Getter $tag $typ) $mnd where
+  instance Interpret (Getter $tag $typ) $mnd where
     type InTermsOf (Getter $tag $typ) $mnd = '[Getter $otag (IORef $typ), Embed IO]
     {-# INLINABLE unsafeSend #-}
     unsafeSend Get = do
       r <- get @($otag)
       embed $ readIORef r
 
-  instance Monad m => Interpret (Putter $tag $typ) $mnd where
+  instance Interpret (Putter $tag $typ) $mnd where
     type InTermsOf (Putter $tag $typ) $mnd = '[Getter $otag (IORef $typ), Embed IO]
     {-# INLINABLE unsafeSend #-}
     unsafeSend (Put x) = do
@@ -41,16 +40,15 @@ makeStateByIORef tag typ otag mnd =
       embed $ writeIORef r x
   |]
 
-makeStateFromOptics :: forall k is s a. Optics.Is k Optics.A_Lens =>
-  Q Type -> Q Type -> Q Type -> Q Type -> Q (TExp (Optics.Optic' k is s a)) -> Q Type -> Q [Dec]
-makeStateFromOptics tag typ otag otyp lens mnd = concat <$> sequence
-  [ makeGetterFromOptics tag typ otag otyp (unsafeCoerce @_ @(Q (TExp (Optics.Optic' Optics.A_Lens is s a))) lens) mnd
-  , makePutterFromOptics tag typ otag otyp (unsafeCoerce @_ @(Q (TExp (Optics.Optic' Optics.A_Lens is s a))) lens) mnd
+makeStateFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type -> Q [Dec]
+makeStateFromLens tag typ otag otyp lens mnd = concat <$> sequence
+  [ makeGetterFromLens tag typ otag otyp lens mnd
+  , makePutterFromLens tag typ otag otyp lens mnd
   ]
 
-makeStateKVFromOptics :: Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
-makeStateKVFromOptics tag k v otag otyp mnd = concat <$> sequence
-  [ makeGetterKVFromOptics tag k v otag otyp mnd
-  , makePutterKVFromOptics tag k v otag otyp mnd
-  , makeDeleterKVFromOptics tag k v otag otyp mnd
+makeStateKVFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
+makeStateKVFromLens tag k v otag otyp mnd = concat <$> sequence
+  [ makeGetterKVFromLens tag k v otag otyp mnd
+  , makePutterKVFromLens tag k v otag otyp mnd
+  , makeDeleterKVFromLens tag k v otag otyp mnd
   ]

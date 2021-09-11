@@ -40,10 +40,10 @@ type family Interprets (xs :: [Effect]) (m :: * -> *) :: Constraint where
   Interprets '[] _ = ()
   Interprets (x ': xs) m = (Interpret x m, Interprets (InTermsOf x m) m, Interprets xs m)
 
-class (Rip (InTermsOf r m)) => Interpret r m where
+class (Rip (InTermsOf r m), Interprets (InTermsOf r m) m) => Interpret r m where
   {-# MINIMAL unsafeSend #-}
   type InTermsOf r m :: [Effect]
-  unsafeSend :: (Interprets '[r] m, Effs (InTermsOf r m)) => r m a -> M m a
+  unsafeSend :: Effs (InTermsOf r m) => r m a -> M m a
 
 -- send is safe in the sense that it restricts the effect needed to be in scope.
 send :: forall r m a. Sendable r m => r m a -> M m a
@@ -72,10 +72,3 @@ underlie = UnsafeLift
 runUnderlying :: forall r m s. Rip r => ((Eff Underlying, Effs r) => M m s) -> m s
 runUnderlying m = runM (rips @r (rip @Underlying m))
 {-# INLINE runUnderlying #-}
-
-data Embed (m' :: * -> *) :: Effect where
-  Embed :: m' a -> Embed m' m a
-
-embed :: forall m' m a. Sendable (Embed m') m => m' a -> M m a
-embed m = send (Embed m)
-{-# INLINE embed #-}
