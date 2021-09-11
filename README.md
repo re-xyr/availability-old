@@ -2,10 +2,54 @@
 
 `availability` is an unconventional effects library.
 
-- Effects are small and lawless.
+- Effects are small and lawless, to provide fine-grained effect control.
 - Effectful functions use a user-provided fixed monad instead of a universal `Eff` or a variable monad type.
 
-`availability` has good performance and performed better than `fused-effects`, `freer-simple` and `polysemy` in `effect-zoo` microbenchmarks.
+## Rationale
+
+Although there are many interpretations to one effect, in most cases only one is used per effect per project. Since the interpretation is locally *fixed* in this sense, the underlying monad running the effects could also be fixed. By fixing a concrete monad, there is a lot more space for compiler optimization based on implementation.
+
+Current effect libraries all use either a universal `Eff` monad that has the capability of offering a wide range of effects, or just be completely polymorphic on the underlying monad to delay any handling of implementation details. `availability` instead asks user to define one concrete monad that can supply all effects used in current project, be it a `ReaderT Global IO` or a traditional transformer stack.
+
+We use a newtype wrapper `M` to screen out the user from directly manipulating the underlying monad, and let user to implement interpretations of effects on `M UnderlyingMonad` in terms of other effects or the underlying monad. Although an `M UnderlyingMonad` offer interpretations of all effects used in a project, `availability` provides a way to express and restrict what effects are used by different effectul functions.
+
+```haskell
+instance Interpret MyEff UnderlyingMonad where
+  ...
+
+myLogic :: Eff MyEff => M UnderlyingMonad a
+myLogic = ...
+```
+
+Here, the `Interpret MyEff UnderlyingMonad` instance contains the implementation of a certain effect on the underlying monad. However users must add a phantom constraint `Eff MyEff` in any function using this interpreted effect, otherwise they face a type error. The typeclass `Eff` does not contain any information itself, and it is purely restrictional. This expresses a separation of concern: the restrictional *availability*, i.e. the `Eff` phantom constraint, as opposed to the implementational *capability*, i.e. the `Interpret` typeclass.
+
+## Performance
+
+`availability` has good performance and performed better than `fused-effects`, `freer-simple`, `polysemy` and sometimes `mtl` in `effect-zoo` microbenchmarks.
+
+### `big-stack`
+
+This benchmark interprets multiple layers of no-op effects. `availability` performed almost identical to `mtl`. This is because I used `mtl` to build the underlying monad.
+
+![big-stack benchmark result](https://raw.githubusercontent.com/re-xyr/availability/master/docs/img/big-stack.png)
+
+### `countdown`
+
+This benchmark decrements a counter till 0. `availability` performed identical to reference implementation due to GHC optimization, even after separating effect implementations and the program.
+
+![countdown benchmark result](https://raw.githubusercontent.com/re-xyr/availability/master/docs/img/countdown.png)
+
+### `file-sizes`
+
+This benchmark tests a typical practical scenario of reading files and logging. `availability` has slightly worse performance than `mtl` and slightly better than `fused-effects`.
+
+![file-sizes benchmark result](https://raw.githubusercontent.com/re-xyr/availability/master/docs/img/file-sizes.png)
+
+### `reinterpretation`
+
+This benchmark involves reinterpreting higher level effects to more primitive ones. `availability` performed better than other libraries.
+
+![reinterpretation benchmark result](https://raw.githubusercontent.com/re-xyr/availability/master/docs/img/reinterpretation.png)
 
 ## Example
 
@@ -47,7 +91,7 @@ makeIterByState [t| "in" |] [t| String |] [t| "inImpl" |] [t| PureProgram |]
 instance Interpret Teletype PureProgram where
   type InTermsOf _ _ = '[Getter "in" (Maybe String), Putter "out" [String]]
   unsafeSend = \case
-    ReadTTY      -> fromMaybe "" <$> get @"in"
+    ReadTTY      -> fromMaybe "" <$> iter @"in"
     WriteTTY msg -> put @"out" [msg]
 
 echoPure :: Eff Teletype => M PureProgram ()
