@@ -2,6 +2,7 @@ module Availability.Error (Thrower (..), throwError, liftEither, Catcher (..), c
                            makeEffViaMonadError, makeEffViaMonadThrow, makeEffViaMonadCatch) where
 
 import           Availability.Impl
+import           Control.Exception    (Exception)
 import qualified Control.Monad.Catch  as MTL
 import qualified Control.Monad.Except as MTL
 import           Language.Haskell.TH  (Dec, Q, Type)
@@ -44,20 +45,20 @@ makeEffViaMonadError typ mnd =
     unsafeSend (CatchError m h) = underlie $ MTL.catchError (runM m) (runM . h)
   |]
 
-makeEffViaMonadThrow :: Q Type -> Q Type -> Q [Dec]
-makeEffViaMonadThrow typ mnd =
+makeEffViaMonadThrow :: Q Type -> Q [Dec]
+makeEffViaMonadThrow mnd =
   [d|
-  instance Interpret (Thrower $typ) $mnd where
-    type InTermsOf (Thrower $typ) $mnd = '[Underlying]
+  instance Exception e => Interpret (Thrower e) $mnd where
+    type InTermsOf (Thrower e) $mnd = '[Underlying]
     {-# INLINE unsafeSend #-}
     unsafeSend (ThrowError e) = underlie $ MTL.throwM e
   |]
 
-makeEffViaMonadCatch :: Q Type -> Q Type -> Q [Dec]
-makeEffViaMonadCatch typ mnd =
+makeEffViaMonadCatch :: Q Type -> Q [Dec]
+makeEffViaMonadCatch mnd =
   [d|
-  instance Interpret (Catcher $typ) $mnd where
-    type InTermsOf (Catcher $typ) $mnd = '[Underlying]
+  instance Exception e => Interpret (Catcher e) $mnd where
+    type InTermsOf (Catcher e) $mnd = '[Underlying]
     {-# INLINE unsafeSend #-}
     unsafeSend (CatchError m h) = underlie $ MTL.catch (runM m) (runM . h)
   |]
