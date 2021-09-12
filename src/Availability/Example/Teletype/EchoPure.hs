@@ -2,26 +2,25 @@
 module Availability.Example.Teletype.EchoPure where
 
 import           Availability.Example.Teletype.Effect
-import           Availability.Fresh
 import           Availability.Impl
 import           Availability.State
 import           Availability.Writer
 import qualified Control.Monad.State                  as MTL
 import qualified Control.Monad.Writer                 as MTL
 import           Data.Function                        ((&))
-import           Data.Maybe                           (fromMaybe)
 
 type PureProgram = MTL.WriterT [String] (MTL.State [String])
 
 makeEffViaMonadWriter [t| "out" |] [t| [String] |] [t| PureProgram |]
-makeEffViaMonadState [t| "inImpl" |] [t| [String] |] [t| PureProgram |]
-makeIterByState [t| "in" |] [t| String |] [t| "inImpl" |] [t| PureProgram |]
+makeEffViaMonadState [t| "in" |] [t| [String] |] [t| PureProgram |]
 
 instance Interpret Teletype PureProgram where
-  type InTermsOf _ _ = '[Getter "in" (Maybe String), Putter "out" [String]]
+  type InTermsOf _ _ = '[Getter "in" [String], Putter "in" [String], Teller "out" [String]]
   unsafeSend = \case
-    ReadTTY      -> fromMaybe "" <$> get @"in"
-    WriteTTY msg -> put @"out" [msg]
+    ReadTTY -> get @"in" >>= \case
+      []     -> pure ""
+      x : xs -> x <$ put @"in" xs
+    WriteTTY msg -> tell @"out" [msg]
 
 echoPure :: Eff Teletype => M PureProgram ()
 echoPure = do

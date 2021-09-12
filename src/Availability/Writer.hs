@@ -1,9 +1,14 @@
-module Availability.Writer (module Availability.Putter, Listener (..), listen, pass, makeEffViaMonadWriter) where
+module Availability.Writer (Teller (..), tell, Listener (..), listen, pass, makeEffViaMonadWriter) where
 
 import           Availability.Impl
-import           Availability.Putter
 import qualified Control.Monad.Writer as MTL
 import           Language.Haskell.TH
+
+data Teller tag w :: Effect where
+  Tell :: w -> Teller tag w m ()
+
+tell :: forall tag w m. (Sendable (Teller tag w) m) => w -> M m ()
+tell x = send (Tell @w @tag x)
 
 data Listener tag w :: Effect where
   Listen :: M m a -> Listener tag w m (a, w)
@@ -20,10 +25,10 @@ pass m = send (Pass @m @a @w @tag m)
 makeEffViaMonadWriter :: Q Type -> Q Type -> Q Type -> Q [Dec]
 makeEffViaMonadWriter tag typ mnd =
   [d|
-  instance Interpret (Putter $tag $typ) $mnd where
-    type InTermsOf (Putter $tag $typ) $mnd = '[Underlying]
+  instance Interpret (Teller $tag $typ) $mnd where
+    type InTermsOf (Teller $tag $typ) $mnd = '[Underlying]
     {-# INLINE unsafeSend #-}
-    unsafeSend (Put x) = underlie $ MTL.tell x
+    unsafeSend (Tell x) = underlie $ MTL.tell x
 
   instance Interpret (Listener $tag $typ) $mnd where
     type InTermsOf (Listener $tag $typ) $mnd = '[Underlying]
