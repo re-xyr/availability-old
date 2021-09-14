@@ -38,9 +38,9 @@ instance Rip rs => Rip (r ': rs) where
 
 type family Interprets (xs :: [Effect]) (m :: * -> *) :: Constraint where
   Interprets '[] _ = ()
-  Interprets (x ': xs) m = (Interpret x m, Interprets (InTermsOf x m) m, Interprets xs m)
+  Interprets (x ': xs) m = (Interpret x m, Interprets xs m)
 
-class (Rip (InTermsOf r m), Interprets (InTermsOf r m) m) => Interpret r m where
+class (Monad m, Rip (InTermsOf r m), Interprets (InTermsOf r m) m) => Interpret r m where
   {-# MINIMAL unsafeSend #-}
   type InTermsOf r m :: [Effect]
   unsafeSend :: Effs (InTermsOf r m) => r m a -> M m a
@@ -55,11 +55,11 @@ interpret :: forall r m a. Interpret r m => (Eff r => M m a) -> (Effs (InTermsOf
 interpret = rip @r
 {-# INLINE interpret #-}
 
-type Sendable r m = (Eff r, Interprets '[r] m)
+type Sendable r m = (Eff r, Interpret r m)
 
 data Underlying :: Effect
 
-instance Interpret Underlying m where
+instance Monad m => Interpret Underlying m where
   type InTermsOf Underlying m = '[]
   unsafeSend = \case
 
