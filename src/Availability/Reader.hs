@@ -1,4 +1,4 @@
-module Availability.Reader (Getter (..), get, GetterKV (..), getKV, Locally (..), local, runReader,
+module Availability.Reader (Getter (..), get, GetterKV (..), getKV, Locally (..), local,
                             makeEffViaMonadReader, makeGetterFromLens, makeGetterKVFromLens) where
 
 import           Availability.Impl
@@ -22,17 +22,11 @@ getKV k = send (GetKV @_ @tag k)
 {-# INLINE getKV #-}
 
 data Locally tag s :: Effect where
-  Local :: (s -> s) -> M m a -> Locally tag s m a
+  Local :: (s -> s) -> (Eff (Getter tag s) => M m a) -> Locally tag s m a
 
-local :: forall tag s m a. Sendable (Locally tag s) m => (s -> s) -> M m a -> M m a
-local f m = send (Local @_ @_ @_ @tag f m)
+local :: forall tag s m a. Sendable (Locally tag s) m => (s -> s) -> (Eff (Getter tag s) => M m a) -> M m a
+local f m = send (Local @_ @tag f m)
 {-# INLINE local #-}
-
--- runReader is magical, but safe.
-runReader :: forall tag s m a. Sendable (Locally tag s) m =>
-  s -> (Effs '[Getter tag s, Locally tag s] => M m a) -> M m a
-runReader s m = rips @'[Getter tag s, Locally tag s] $ local @tag (const s) m
-{-# INLINE runReader #-}
 
 makeGetterFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type -> Q [Dec]
 makeGetterFromLens tag typ otag otyp lens mnd =
@@ -67,5 +61,5 @@ makeEffViaMonadReader tag typ mnd =
   instance Interpret (Locally $tag $typ) $mnd where
     type InTermsOf (Locally $tag $typ) $mnd = '[Underlying]
     {-# INLINE unsafeSend #-}
-    unsafeSend (Local f m) = underlie $ MTL.local f (runM m)
+    unsafeSend (Local f m) = underlie $ MTL.local f (runUnderlying @'[Getter $tag $typ] m)
   |]
