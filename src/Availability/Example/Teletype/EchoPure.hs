@@ -1,8 +1,9 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_HADDOCK hide #-}
 module Availability.Example.Teletype.EchoPure where
 
+import           Availability
 import           Availability.Example.Teletype.Effect
-import           Availability.Impl
 import           Availability.State
 import           Availability.Writer
 import qualified Control.Monad.State                  as MTL
@@ -16,7 +17,7 @@ makeEffViaMonadState [t| "in" |] [t| [String] |] [t| PureProgram |]
 
 instance Interpret Teletype PureProgram where
   type InTermsOf _ _ = '[Getter "in" [String], Putter "in" [String], Teller "out" [String]]
-  unsafeSend = \case
+  interpret = \case
     ReadTTY -> get @"in" >>= \case
       []     -> pure ""
       x : xs -> x <$ put @"in" xs
@@ -32,4 +33,3 @@ echoPure = do
 runEchoPure :: [String] -> [String]
 runEchoPure s = runUnderlying @'[Teletype] echoPure & MTL.execWriterT & (`MTL.evalState` s)
 -- >>> runEchoPure ["abc", "def", "ghci"]
--- ["abc","def","ghci"]

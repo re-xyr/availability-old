@@ -1,7 +1,7 @@
 module Availability.Embed (Embed (..), embed, Unembed (..), withUnembed, makeEffViaMonadIO,
                            makeEffViaMonadUnliftIO) where
 
-import           Availability.Impl
+import           Availability
 import           Language.Haskell.TH
 import qualified UnliftIO            as MTL
 
@@ -23,9 +23,9 @@ makeEffViaMonadIO :: Q Type -> Q [Dec]
 makeEffViaMonadIO mnd =
   [d|
   instance Interpret (Embed IO) $mnd where
-    type InTermsOf (Embed IO) $mnd = '[Underlying]
-    {-# INLINE unsafeSend #-}
-    unsafeSend (Embed m) = underlie $ MTL.liftIO m
+    type InTermsOf _ _ = '[Underlying]
+    {-# INLINE interpret #-}
+    interpret (Embed m) = underlie $ MTL.liftIO m
   |]
 
 makeEffViaMonadUnliftIO :: Q Type -> Q [Dec]
@@ -33,6 +33,6 @@ makeEffViaMonadUnliftIO mnd =
   [d|
   instance Interpret (Unembed IO) $mnd where
     type InTermsOf _ _ = '[Underlying]
-    {-# INLINE unsafeSend #-}
-    unsafeSend (WithUnembed f) = underlie $ MTL.withRunInIO \unlift -> f (unlift . runM)
+    {-# INLINE interpret #-}
+    interpret (WithUnembed f) = underlie $ MTL.withRunInIO \unlift -> f (unlift . runM)
   |]

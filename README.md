@@ -72,7 +72,7 @@ writeTTY s = send (WriteTTY s)
 One can implement a pure echoing program via `mtl`:
 
 ```haskell
-import           Availability.Impl
+import           Availability
 import           Availability.State
 import           Availability.Writer
 import qualified Control.Monad.State                  as MTL
@@ -87,7 +87,7 @@ makeEffViaMonadState [t| "in" |] [t| [String] |] [t| PureProgram |]
 
 instance Interpret Teletype PureProgram where
   type InTermsOf _ _ = '[Getter "in" [String], Putter "in" [String], Teller "out" [String]]
-  unsafeSend = \case
+  interpret = \case
     ReadTTY -> get @"in" >>= \case
       []     -> pure ""
       x : xs -> x <$ put @"in" xs
@@ -108,13 +108,13 @@ or an impure interpretation directly through `IO`.
 
 ```haskell
 import           Availability.Embed
-import           Availability.Impl
+import           Availability
 
 makeEffViaMonadIO [t| IO |]
 
 instance Interpret Teletype IO where
   type InTermsOf _ _ = '[Embed IO]
-  unsafeSend = \case
+  interpret = \case
     ReadTTY      -> embed getLine
     WriteTTY msg -> embed $ putStrLn msg
 

@@ -1,7 +1,7 @@
 module Availability.Trace (Trace (..), trace, makeTraceByIO, makeTraceByWriter) where
 
+import           Availability
 import           Availability.Embed
-import           Availability.Impl
 import           Availability.Writer (Teller, tell)
 import           Language.Haskell.TH (Dec, Q, Type)
 
@@ -16,16 +16,16 @@ makeTraceByIO :: Q Type -> Q [Dec]
 makeTraceByIO mnd =
   [d|
   instance Interpret Trace $mnd where
-    type InTermsOf Trace $mnd = '[Embed IO]
-    {-# INLINE unsafeSend #-}
-    unsafeSend (Trace s) = embed $ putStrLn s
+    type InTermsOf _ _ = '[Embed IO]
+    {-# INLINE interpret #-}
+    interpret (Trace s) = embed $ putStrLn s
   |]
 
 makeTraceByWriter :: Q Type -> Q Type -> Q [Dec]
 makeTraceByWriter tag mnd =
   [d|
   instance Interpret Trace $mnd where
-    type InTermsOf Trace $mnd = '[Teller $tag [String]]
-    {-# INLINE unsafeSend #-}
-    unsafeSend (Trace s) = tell @($tag) [s]
+    type InTermsOf _ _ = '[Teller $tag [String]]
+    {-# INLINE interpret #-}
+    interpret (Trace s) = tell @($tag) [s]
   |]

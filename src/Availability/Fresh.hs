@@ -1,6 +1,6 @@
 module Availability.Fresh (Fresh, fresh, makeFreshByState) where
 
-import           Availability.Impl
+import           Availability
 import           Availability.State
 import           Language.Haskell.TH (Dec, Q, Type)
 
@@ -15,9 +15,9 @@ makeFreshByState :: Q Type -> Q Type -> Q [Dec]
 makeFreshByState otag mnd =
   [d|
   instance Interpret Fresh $mnd where
-    type InTermsOf Fresh $mnd = '[Getter $otag Int, Putter $otag Int]
-    {-# INLINABLE unsafeSend #-}
-    unsafeSend Fresh = do
+    type InTermsOf _ _ = '[Getter $otag Int, Putter $otag Int]
+    {-# INLINABLE interpret #-}
+    interpret Fresh = do
       x <- get @($otag)
       put @($otag) (x + 1)
       pure x

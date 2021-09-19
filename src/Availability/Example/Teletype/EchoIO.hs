@@ -1,15 +1,16 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_HADDOCK hide #-}
 module Availability.Example.Teletype.EchoIO where
 
+import           Availability
 import           Availability.Embed
 import           Availability.Example.Teletype.Effect
-import           Availability.Impl
 
 makeEffViaMonadIO [t| IO |]
 
 instance Interpret Teletype IO where
   type InTermsOf _ _ = '[Embed IO]
-  unsafeSend = \case
+  interpret = \case
     ReadTTY      -> embed getLine
     WriteTTY msg -> embed $ putStrLn msg
 

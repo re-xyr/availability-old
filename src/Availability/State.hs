@@ -1,10 +1,10 @@
 module Availability.State (Getter (..), get, Putter (..), put, PutterKV (..), putKV, DeleterKV (..), delKV,
-                           makePutterFromLens, makePutterKVFromLens, makeDeleterKVFromLens, state, modify,
+                           state, modify, makePutterFromLens, makePutterKVFromLens, makeDeleterKVFromLens,
                            makeStateByIORef, makeGetterFromLens, makeGetterKVFromLens, makeEffViaMonadState,
                            makeStateFromLens, makeStateKVFromLens) where
 
+import           Availability
 import           Availability.Embed
-import           Availability.Impl
 import           Availability.Reader
 import qualified Control.Monad.State as MTL
 import           Data.IORef          (IORef, readIORef, writeIORef)
@@ -51,9 +51,9 @@ makePutterFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type ->
 makePutterFromLens tag typ otag otyp lens mnd =
   [d|
   instance Interpret (Putter $tag $typ) $mnd where
-    type InTermsOf (Putter $tag $typ) $mnd = '[Getter $otag $otyp, Putter $otag $otyp]
-    {-# INLINABLE unsafeSend #-}
-    unsafeSend (Put x) = do
+    type InTermsOf _ _ = '[Getter $otag $otyp, Putter $otag $otyp]
+    {-# INLINABLE interpret #-}
+    interpret (Put x) = do
       s <- get @($otag) @($otyp)
       put @($otag) @($otyp) (s & $lens .~ x)
   |]
@@ -62,9 +62,9 @@ makePutterKVFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q Type
 makePutterKVFromLens tag ktyp vtyp otag otyp mnd =
   [d|
   instance Interpret (PutterKV $tag $ktyp $vtyp) $mnd where
-    type InTermsOf (PutterKV $tag $ktyp $vtyp) $mnd = '[Getter $otag $otyp, Putter $otag $otyp]
-    {-# INLINABLE unsafeSend #-}
-    unsafeSend (PutKV k v) = do
+    type InTermsOf _ _ = '[Getter $otag $otyp, Putter $otag $otyp]
+    {-# INLINABLE interpret #-}
+    interpret (PutKV k v) = do
       s <- get @($otag) @($otyp)
       put @($otag) @($otyp) (s & Lens.at k ?~ v)
   |]
@@ -73,9 +73,9 @@ makeDeleterKVFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q Typ
 makeDeleterKVFromLens tag ktyp vtyp otag otyp mnd =
   [d|
   instance Interpret (DeleterKV $tag $ktyp $vtyp) $mnd where
-    type InTermsOf (DeleterKV $tag $ktyp $vtyp) $mnd = '[Getter $otag $otyp, Putter $otag $otyp]
-    {-# INLINABLE unsafeSend #-}
-    unsafeSend (DelKV k) = do
+    type InTermsOf _ _ = '[Getter $otag $otyp, Putter $otag $otyp]
+    {-# INLINABLE interpret #-}
+    interpret (DelKV k) = do
       s <- get @($otag) @($otyp)
       put @($otag) @($otyp) (s & Lens.at k .~ Nothing)
   |]
@@ -84,30 +84,30 @@ makeEffViaMonadState :: Q Type -> Q Type -> Q Type -> Q [Dec]
 makeEffViaMonadState tag typ mnd =
   [d|
   instance Interpret (Getter $tag $typ) $mnd where
-    type InTermsOf (Getter $tag $typ) $mnd = '[Underlying]
-    {-# INLINE unsafeSend #-}
-    unsafeSend Get = underlie MTL.get
+    type InTermsOf _ _ = '[Underlying]
+    {-# INLINE interpret #-}
+    interpret Get = underlie MTL.get
 
   instance Interpret (Putter $tag $typ) $mnd where
-    type InTermsOf (Putter $tag $typ) $mnd = '[Underlying]
-    {-# INLINE unsafeSend #-}
-    unsafeSend (Put x) = underlie $ MTL.put x
+    type InTermsOf _ _ = '[Underlying]
+    {-# INLINE interpret #-}
+    interpret (Put x) = underlie $ MTL.put x
   |]
 
 makeStateByIORef :: Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
 makeStateByIORef tag typ otag mnd =
   [d|
   instance Interpret (Getter $tag $typ) $mnd where
-    type InTermsOf (Getter $tag $typ) $mnd = '[Getter $otag (IORef $typ), Embed IO]
-    {-# INLINABLE unsafeSend #-}
-    unsafeSend Get = do
+    type InTermsOf _ _ = '[Getter $otag (IORef $typ), Embed IO]
+    {-# INLINABLE interpret #-}
+    interpret Get = do
       r <- get @($otag)
       embed $ readIORef r
 
   instance Interpret (Putter $tag $typ) $mnd where
-    type InTermsOf (Putter $tag $typ) $mnd = '[Getter $otag (IORef $typ), Embed IO]
-    {-# INLINABLE unsafeSend #-}
-    unsafeSend (Put x) = do
+    type InTermsOf _ _ = '[Getter $otag (IORef $typ), Embed IO]
+    {-# INLINABLE interpret #-}
+    interpret (Put x) = do
       r <- get @($otag)
       embed $ writeIORef r x
   |]

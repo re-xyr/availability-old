@@ -1,7 +1,7 @@
-module Availability.Reader (Getter (..), get, GetterKV (..), getKV, Locally (..), local,
+module Availability.Reader (Getter (..), get, GetterKV (..), getKV, Locally (..), local, reader,
                             makeEffViaMonadReader, makeGetterFromLens, makeGetterKVFromLens) where
 
-import           Availability.Impl
+import           Availability
 import qualified Control.Monad.Reader as MTL
 import           Language.Haskell.TH  (Dec, Exp, Q, Type)
 import           Lens.Micro           ((^.))
@@ -28,13 +28,17 @@ local :: forall tag s m a. Sendable (Locally tag s) m => (s -> s) -> (Eff (Gette
 local f m = send (Local @_ @tag f m)
 {-# INLINE local #-}
 
+reader :: forall tag s m a. (Sendable (Getter tag s) m) => (s -> a) -> M m a
+reader f = f <$> get @tag
+{-# INLINE reader #-}
+
 makeGetterFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type -> Q [Dec]
 makeGetterFromLens tag typ otag otyp lens mnd =
   [d|
   instance Interpret (Getter $tag $typ) $mnd where
-    type InTermsOf (Getter $tag $typ) $mnd = '[Getter $otag $otyp]
-    {-# INLINABLE unsafeSend #-}
-    unsafeSend Get = do
+    type InTermsOf _ _ = '[Getter $otag $otyp]
+    {-# INLINABLE interpret #-}
+    interpret Get = do
       s <- get @($otag) @($otyp)
       pure (s ^. $lens)
   |]
@@ -43,9 +47,9 @@ makeGetterKVFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q Type
 makeGetterKVFromLens tag ktyp vtyp otag otyp mnd =
   [d|
   instance Interpret (GetterKV $tag $ktyp $vtyp) $mnd where
-    type InTermsOf (GetterKV $tag $ktyp $vtyp) $mnd = '[Getter $otag $otyp]
-    {-# INLINABLE unsafeSend #-}
-    unsafeSend (GetKV k) = do
+    type InTermsOf _ _ = '[Getter $otag $otyp]
+    {-# INLINABLE interpret #-}
+    interpret (GetKV k) = do
       s <- get @($otag) @($otyp)
       pure (s ^. Lens.at k)
   |]
@@ -54,12 +58,12 @@ makeEffViaMonadReader :: Q Type -> Q Type -> Q Type -> Q [Dec]
 makeEffViaMonadReader tag typ mnd =
   [d|
   instance Interpret (Getter $tag $typ) $mnd where
-    type InTermsOf (Getter $tag $typ) $mnd = '[Underlying]
-    {-# INLINE unsafeSend #-}
-    unsafeSend Get = underlie MTL.ask
+    type InTermsOf _ _ = '[Underlying]
+    {-# INLINE interpret #-}
+    interpret Get = underlie MTL.ask
 
   instance Interpret (Locally $tag $typ) $mnd where
-    type InTermsOf (Locally $tag $typ) $mnd = '[Underlying]
-    {-# INLINE unsafeSend #-}
-    unsafeSend (Local f m) = underlie $ MTL.local f (runUnderlying @'[Getter $tag $typ] m)
+    type InTermsOf _ _ = '[Underlying]
+    {-# INLINE interpret #-}
+    interpret (Local f m) = underlie $ MTL.local f (runUnderlying @'[Getter $tag $typ] m)
   |]

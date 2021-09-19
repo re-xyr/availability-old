@@ -1,7 +1,7 @@
+{-# OPTIONS_HADDOCK hide #-}
 module Availability.Example.Teletype.Effect where
 
 import           Availability (Effect, M, Sendable, send)
-
 
 data Teletype :: Effect where
   ReadTTY :: Teletype m String

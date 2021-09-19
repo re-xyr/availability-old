@@ -1,7 +1,7 @@
 module Availability.Error (Thrower (..), throwError, liftEither, Catcher (..), catchError, tryError,
                            makeEffViaMonadError, makeEffViaMonadThrow, makeEffViaMonadCatch) where
 
-import           Availability.Impl
+import           Availability
 import           Control.Exception    (Exception)
 import qualified Control.Monad.Catch  as MTL
 import qualified Control.Monad.Except as MTL
@@ -30,35 +30,36 @@ catchError m h = send (CatchError @_ @_ @_ m h)
 
 tryError :: forall e m a. Sendable (Catcher e) m => (Eff (Thrower e) => M m a) -> M m (Either e a)
 tryError m = (Right <$> m) `catchError` \e -> pure $ Left e
+{-# INLINE tryError #-}
 
 makeEffViaMonadError :: Q Type -> Q Type -> Q [Dec]
 makeEffViaMonadError typ mnd =
   [d|
   instance Interpret (Thrower $typ) $mnd where
-    type InTermsOf (Thrower $typ) $mnd = '[Underlying]
-    {-# INLINE unsafeSend #-}
-    unsafeSend (ThrowError e) = underlie $ MTL.throwError e
+    type InTermsOf _ _ = '[Underlying]
+    {-# INLINE interpret #-}
+    interpret (ThrowError e) = underlie $ MTL.throwError e
 
   instance Interpret (Catcher $typ) $mnd where
-    type InTermsOf (Catcher $typ) $mnd = '[Underlying]
-    {-# INLINE unsafeSend #-}
-    unsafeSend (CatchError m h) = underlie $ MTL.catchError (runUnderlying @'[Thrower $typ] m) (runM . h)
+    type InTermsOf _ _ = '[Underlying]
+    {-# INLINE interpret #-}
+    interpret (CatchError m h) = underlie $ MTL.catchError (runUnderlying @'[Thrower $typ] m) (runM . h)
   |]
 
 makeEffViaMonadThrow :: Q Type -> Q [Dec]
 makeEffViaMonadThrow mnd =
   [d|
   instance Exception e => Interpret (Thrower e) $mnd where
-    type InTermsOf (Thrower e) $mnd = '[Underlying]
-    {-# INLINE unsafeSend #-}
-    unsafeSend (ThrowError e) = underlie $ MTL.throwM $ AvailabilityException e
+    type InTermsOf _ _ = '[Underlying]
+    {-# INLINE interpret #-}
+    interpret (ThrowError e) = underlie $ MTL.throwM $ AvailabilityException e
   |]
 
 makeEffViaMonadCatch :: Q Type -> Q [Dec]
 makeEffViaMonadCatch mnd =
   [d|
   instance Exception e => Interpret (Catcher e) $mnd where
-    type InTermsOf (Catcher e) $mnd = '[Underlying]
-    {-# INLINE unsafeSend #-}
-    unsafeSend (CatchError m h) = underlie $ MTL.catch (runUnderlying @'[Thrower e] m) (runM . h . runException)
+    type InTermsOf _ _ = '[Underlying]
+    {-# INLINE interpret #-}
+    interpret (CatchError m h) = underlie $ MTL.catch (runUnderlying @'[Thrower e] m) (runM . h . runException)
   |]
