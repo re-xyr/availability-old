@@ -1,11 +1,12 @@
 module Availability.State (Getter (..), get, Putter (..), put, PutterKV (..), putKV, DeleterKV (..), delKV,
                            state, modify, makePutterFromLens, makePutterKVFromLens, makeDeleterKVFromLens,
                            makeStateByIORef, makeGetterFromLens, makeGetterKVFromLens, makeEffViaMonadState,
-                           makeStateFromLens, makeStateKVFromLens) where
+                           makeStateFromLens, makeStateKVFromLens, makeLocallyByState) where
 
 import           Availability
 import           Availability.Embed
 import           Availability.Reader
+import           Control.Monad.Catch (bracket)
 import qualified Control.Monad.State as MTL
 import           Data.IORef          (IORef, readIORef, writeIORef)
 import           Language.Haskell.TH (Dec, Exp, Q, Type)
@@ -124,3 +125,18 @@ makeStateKVFromLens tag k v otag otyp mnd = concat <$> sequence
   , makePutterKVFromLens tag k v otag otyp mnd
   , makeDeleterKVFromLens tag k v otag otyp mnd
   ]
+
+-- This is not thread safe + requires MonadMask.
+makeLocallyByState :: Q Type -> Q Type -> Q Type -> Q [Dec]
+makeLocallyByState tag typ mnd =
+  [d|
+  instance Interpret (Locally $tag $typ) $mnd where
+    type InTermsOf _ _ = '[Getter $tag $typ, Putter $tag $typ, Underlying]
+    {-# INLINABLE interpret #-}
+    interpret (Local f m) = do
+      s <- get @($tag) @($typ)
+      underlie $ bracket
+        (runM $ modify @($tag) f)
+        (const $ runM $ put @($tag) @($typ) s)
+        (const $ runUnderlying @'[Getter $tag $typ] m)
+  |]

@@ -1,10 +1,13 @@
 module Availability.Reader (Getter (..), get, GetterKV (..), getKV, Locally (..), local, reader,
-                            makeEffViaMonadReader, makeGetterFromLens, makeGetterKVFromLens) where
+                            makeEffViaMonadReader, makeGetterFromLens, makeLocallyFromLens, makeReaderFromLens,
+                            makeGetterKVFromLens) where
 
 import           Availability
+import           Control.Monad        (join)
 import qualified Control.Monad.Reader as MTL
+import           Data.Function        ((&))
 import           Language.Haskell.TH  (Dec, Exp, Q, Type)
-import           Lens.Micro           ((^.))
+import           Lens.Micro           ((%~), (^.))
 import qualified Lens.Micro           as Lens
 
 data Getter tag s :: Effect where
@@ -42,6 +45,21 @@ makeGetterFromLens tag typ otag otyp lens mnd =
       s <- get @($otag) @($otyp)
       pure (s ^. $lens)
   |]
+
+makeLocallyFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type -> Q [Dec]
+makeLocallyFromLens tag typ otag otyp lens mnd =
+  [d|
+  instance Interpret (Locally $tag $typ) $mnd where
+    type InTermsOf _ _ = '[Locally $otag $otyp, Getter $tag $typ]
+    {-# INLINE interpret #-}
+    interpret (Local f m) = local @($otag) @($otyp) (\x -> x & $lens %~ f) m
+  |]
+
+makeReaderFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type -> Q [Dec]
+makeReaderFromLens tag typ otag otyp lens mnd = join <$> sequence
+  [ makeGetterFromLens tag typ otag otyp lens mnd
+  , makeLocallyFromLens tag typ otag otyp lens mnd
+  ]
 
 makeGetterKVFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
 makeGetterKVFromLens tag ktyp vtyp otag otyp mnd =

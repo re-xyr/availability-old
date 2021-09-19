@@ -1,4 +1,4 @@
-module Availability.Trace (Trace (..), trace, makeTraceByIO, makeTraceByWriter) where
+module Availability.Trace (Trace (..), trace, makeTraceByIO, makeTraceByTeller) where
 
 import           Availability
 import           Availability.Embed
@@ -21,8 +21,8 @@ makeTraceByIO mnd =
     interpret (Trace s) = embed $ putStrLn s
   |]
 
-makeTraceByWriter :: Q Type -> Q Type -> Q [Dec]
-makeTraceByWriter tag mnd =
+makeTraceByTeller :: Q Type -> Q Type -> Q [Dec]
+makeTraceByTeller tag mnd =
   [d|
   instance Interpret Trace $mnd where
     type InTermsOf _ _ = '[Teller $tag [String]]

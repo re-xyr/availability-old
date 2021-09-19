@@ -1,6 +1,8 @@
-module Availability.Writer (Teller (..), tell, Listener (..), listen, pass, makeEffViaMonadWriter) where
+module Availability.Writer (Teller (..), tell, Listener (..), listen, pass, makeEffViaMonadWriter,
+                            makeTellerByList, makeTellerByMonoid) where
 
 import           Availability
+import           Availability.State   (Getter, Putter, modify)
 import qualified Control.Monad.Writer as MTL
 import           Language.Haskell.TH
 
@@ -37,3 +39,38 @@ makeEffViaMonadWriter tag typ mnd =
     interpret (Listen m) = underlie $ MTL.listen (runM m)
     interpret (Pass m)   = underlie $ MTL.pass (runM m)
   |]
+
+makeTellerByList :: Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
+makeTellerByList tag typ otag mnd =
+  [d|
+  instance Interpret (Teller $tag $typ) $mnd where
+    type InTermsOf _ _ = '[Getter $otag [$typ], Putter $otag [$typ]]
+    interpret (Tell x) = modify @() (x :)
+  |]
+
+-- Note that Listener is not thread safe in this instance.
+makeTellerByMonoid :: Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
+makeTellerByMonoid tag typ otag mnd =
+  [d|
+  instance Interpret (Teller $tag $typ) $mnd where
+    type InTermsOf _ _ = '[Getter $otag $typ, Putter $otag $typ]
+    {-# INLINE interpret #-}
+    interpret (Tell x) = modify @($otag) (<> x)
+  |]
+
+-- instance Interpret (Listener $tag $typ) $mnd where
+--   type InTermsOf _ _ = '[Getter $otag $typ, Putter $otag $typ]
+--   interpret (Listen m) = do
+--     s <- get @($otag) @($typ)
+--     put @($otag) @($typ) mempty
+--     x <- m
+--     s' <- get @($otag)
+--     put @($otag) $! s <> s'
+--     pure (x, s')
+--   interpret (Pass m) = do
+--     s <- get @($otag) @($typ)
+--     put @($otag) @($typ) mempty
+--     (x, f) <- m
+--     s' <- get @($otag)
+--     put @($otag) $! s <> f s'
+--     pure x
