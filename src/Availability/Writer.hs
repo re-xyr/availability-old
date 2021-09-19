@@ -1,10 +1,13 @@
-module Availability.Writer (Teller (..), tell, Listener (..), listen, pass, makeEffViaMonadWriter,
-                            makeTellerByList, makeTellerByMonoid) where
+module Availability.Writer (Teller (..), tell, Listener (..), listen, pass, ViaMonadWriter (..), TellerByList (..),
+                            TellerByMonoid (..)) where
 
 import           Availability
+import           Availability.Lens
 import           Availability.State   (Getter, Putter, modify')
+import           Control.Lens         ((#))
+import           Control.Monad.Trans  (MonadIO)
 import qualified Control.Monad.Writer as MTL
-import           Language.Haskell.TH
+import           Data.Generics.Sum    (AsAny (_As))
 
 data Teller tag w :: Effect where
   Tell :: w -> Teller tag w m ()
@@ -25,38 +28,41 @@ pass :: forall tag w m a. (Sendable (Listener tag w) m) => M m (a, w -> w) -> M 
 pass m = send (Pass @m @a @w @tag m)
 {-# INLINE pass #-}
 
-makeEffViaMonadWriter :: Q Type -> Q Type -> Q Type -> Q [Dec]
-makeEffViaMonadWriter tag typ mnd =
-  [d|
-  instance Interpret (Teller $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret (Tell x) = underlie $ MTL.tell x
+newtype ViaMonadWriter m a = ViaMonadWriter (m a)
+  deriving (Functor, Applicative, Monad, MonadIO, MTL.MonadWriter w)
 
-  instance Interpret (Listener $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret (Listen m) = underlie $ MTL.listen (runM m)
-    interpret (Pass m)   = underlie $ MTL.pass (runM m)
-  |]
+instance MTL.MonadWriter w m => Interpret (Teller tag w) (ViaMonadWriter m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret (Tell x) = underlie $ MTL.tell x
 
-makeTellerByList :: Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
-makeTellerByList tag typ otag mnd =
-  [d|
-  instance Interpret (Teller $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Getter $otag [$typ], Putter $otag [$typ]]
-    interpret (Tell x) = modify' @() (x :)
-  |]
+instance MTL.MonadWriter w m => Interpret (Listener tag w) (ViaMonadWriter m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret (Listen m) = underlie $ MTL.listen (runM m)
+  interpret (Pass m)   = underlie $ MTL.pass (runM m)
 
--- Note that Listener is not thread safe in this instance.
-makeTellerByMonoid :: Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
-makeTellerByMonoid tag typ otag mnd =
-  [d|
-  instance Interpret (Teller $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Getter $otag $typ, Putter $otag $typ]
-    {-# INLINE interpret #-}
-    interpret (Tell x) = modify' @($otag) (<> x)
-  |]
+newtype TellerByList otag w m a = TellerByList (m a)
+  deriving (Functor, Applicative, Monad, MonadIO)
+
+instance Interprets '[Getter otag [w], Putter otag [w]] m => Interpret (Teller tag w) (TellerByList otag w m) where
+  type InTermsOf _ _ = '[Getter otag [w], Putter otag [w]]
+  {-# INLINE interpret #-}
+  interpret (Tell x) = coerceM @m $ modify' @otag (x :)
+
+newtype TellerByMonoid otag w m a = TellerByMonoid (m a)
+  deriving (Functor, Applicative, Monad, MonadIO)
+
+instance (Monoid w, Interprets '[Getter otag w, Putter otag w] m) =>
+  Interpret (Teller tag w) (TellerByMonoid otag w m) where
+  type InTermsOf _ _ = '[Getter otag w, Putter otag w]
+  {-# INLINE interpret #-}
+  interpret (Tell x) = coerceM @m $ modify' @otag (<> x)
+
+instance (Interprets '[Teller otag w] m, AsAny sel v w) => Interpret (Teller tag v) (FromAs sel otag w m) where
+  type InTermsOf _ _ = '[Teller otag w]
+  {-# INLINE interpret #-}
+  interpret (Tell x) = coerceM @m $ tell @otag @w (_As @sel # x)
 
 -- instance Interpret (Listener $tag $typ) $mnd where
 --   type InTermsOf _ _ = '[Getter $otag $typ, Putter $otag $typ]

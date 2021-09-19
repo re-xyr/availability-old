@@ -1,11 +1,14 @@
 module Availability.Error (Thrower (..), throwError, liftEither, Catcher (..), catchError, catchJust, tryError,
-                           makeEffViaMonadError, makeEffViaMonadThrow, makeEffViaMonadCatch) where
+                           ViaMonadError (..), ViaMonadThrow (..), ViaMonadCatch (..)) where
 
 import           Availability
+import           Availability.Lens
 import           Control.Exception    (Exception)
+import           Control.Lens         ((#), (^?))
 import qualified Control.Monad.Catch  as MTL
 import qualified Control.Monad.Except as MTL
-import           Language.Haskell.TH  (Dec, Q, Type)
+import           Control.Monad.Trans  (MonadIO)
+import           Data.Generics.Sum    (AsAny (_As))
 
 data Thrower e :: Effect where
   ThrowError :: e -> Thrower e m a
@@ -39,34 +42,45 @@ tryError :: forall e m a. Sendable (Catcher e) m => (Eff (Thrower e) => M m a) -
 tryError m = (Right <$> m) `catchError` \e -> pure $ Left e
 {-# INLINE tryError #-}
 
-makeEffViaMonadError :: Q Type -> Q Type -> Q [Dec]
-makeEffViaMonadError typ mnd =
-  [d|
-  instance Interpret (Thrower $typ) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret (ThrowError e) = underlie $ MTL.throwError e
+newtype ViaMonadError m a = ViaMonadError (m a)
+  deriving (Functor, Applicative, Monad, MonadIO, MTL.MonadError e)
 
-  instance Interpret (Catcher $typ) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret (CatchError m h) = underlie $ MTL.catchError (runUnderlying @'[Thrower $typ] m) (runM . h)
-  |]
+instance MTL.MonadError e m => Interpret (Thrower e) (ViaMonadError m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret (ThrowError e) = underlie $ MTL.throwError e
 
-makeEffViaMonadThrow :: Q Type -> Q [Dec]
-makeEffViaMonadThrow mnd =
-  [d|
-  instance Exception e => Interpret (Thrower e) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret (ThrowError e) = underlie $ MTL.throwM $ AvailabilityException e
-  |]
+instance MTL.MonadError e m => Interpret (Catcher e) (ViaMonadError m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret (CatchError m h) = underlie $ MTL.catchError (runUnderlying @'[Thrower e] m) (runM . h)
 
-makeEffViaMonadCatch :: Q Type -> Q [Dec]
-makeEffViaMonadCatch mnd =
-  [d|
-  instance Exception e => Interpret (Catcher e) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret (CatchError m h) = underlie $ MTL.catch (runUnderlying @'[Thrower e] m) (runM . h . runException)
-  |]
+newtype ViaMonadThrow m a = ViaMonadThrow (m a)
+  deriving (Functor, Applicative, Monad, MonadIO, MTL.MonadThrow)
+
+instance (Exception e, MTL.MonadThrow m) => Interpret (Thrower e) (ViaMonadThrow m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret (ThrowError e) = underlie $ MTL.throwM $ AvailabilityException e
+
+newtype ViaMonadCatch m a = ViaMonadCatch (m a)
+  deriving (Functor, Applicative, Monad, MonadIO, MTL.MonadThrow, MTL.MonadCatch)
+
+instance (Exception e, MTL.MonadCatch m) => Interpret (Catcher e) (ViaMonadCatch m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret (CatchError m h) = underlie $ MTL.catch (runUnderlying @'[Thrower e] m) (runM . h . runException)
+
+instance (Interprets '[Thrower e] m, AsAny sel d e) => Interpret (Thrower d) (FromAs sel otag e m) where
+  type InTermsOf _ _ = '[Thrower e]
+  {-# INLINE interpret #-}
+  interpret (ThrowError d) = coerceM @m $ throwError @e (_As @sel # d)
+
+instance (Interprets '[Catcher e, Thrower e] m, AsAny sel d e) => Interpret (Catcher d) (FromAs sel otag e m) where
+  type InTermsOf _ _ = '[Catcher e, Thrower e]
+  {-# INLINE interpret #-}
+  interpret (CatchError m h) = coerceM @m $
+    (coerceM' @m $ derive @(Thrower d) m) `catchError` \(e :: e) ->
+      case e ^? _As @sel of
+        Nothing -> throwError e
+        Just d  -> coerceM' @m $ h d

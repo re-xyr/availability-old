@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-orphans #-}
 module Teletype where
 
 import           Availability
@@ -6,6 +5,7 @@ import           Availability.Embed
 import           Availability.State
 import           Availability.Writer
 import qualified Control.Monad.State     as MTL
+import           Control.Monad.Trans     (MonadIO)
 import qualified Control.Monad.Writer    as MTL
 import           Data.Function           ((&))
 import           System.IO.Silently      (capture_)
@@ -28,10 +28,13 @@ writeTTY s = send (WriteTTY s)
 
 -- Pure echo program --
 
-type PureProgram = MTL.WriterT [String] (MTL.State [String])
-
-makeEffViaMonadWriter [t|"out"|] [t|[String]|] [t|PureProgram|]
-makeEffViaMonadState  [t|"in" |] [t|[String]|] [t|PureProgram|]
+newtype PureProgram a = PureProgram { runPureProgram :: MTL.WriterT [String] (MTL.State [String]) a }
+  deriving (Functor, Applicative, Monad)
+  deriving (MTL.MonadWriter [String], MTL.MonadState [String])
+  deriving (Interpret (Teller "out" [String]))
+    via ViaMonadWriter PureProgram
+  deriving (Interpret (Getter "in" [String]), Interpret (Putter "in" [String]))
+    via ViaMonadState PureProgram
 
 instance Interpret Teletype PureProgram where
   type InTermsOf _ _ = '[Getter "in" [String], Putter "in" [String], Teller "out" [String]]
@@ -49,19 +52,22 @@ echoPure = do
     _  -> writeTTY i >> echoPure
 
 runEchoPure :: [String] -> [String]
-runEchoPure s = runUnderlying @'[Teletype] echoPure & MTL.execWriterT & (`MTL.evalState` s)
+runEchoPure s = runUnderlying @'[Teletype] echoPure & runPureProgram & MTL.execWriterT & (`MTL.evalState` s)
 
 -- Impure echo program --
 
-makeEffViaMonadIO [t|IO|]
+newtype ImpureProgram a = ImpureProgram { runImpureProgram :: IO a }
+  deriving (Functor, Applicative, Monad, MonadIO)
+  deriving (Interpret (Embed IO))
+    via ViaMonadIO ImpureProgram
 
-instance Interpret Teletype IO where
+instance Interpret Teletype ImpureProgram where
   type InTermsOf _ _ = '[Embed IO]
   interpret = \case
     ReadTTY      -> embed getLine
     WriteTTY msg -> embed $ putStrLn msg
 
-echoIO :: Eff Teletype => M IO ()
+echoIO :: Eff Teletype => M ImpureProgram ()
 echoIO = do
   i <- readTTY
   case i of
@@ -69,7 +75,7 @@ echoIO = do
     _  -> writeTTY i >> echoIO
 
 main :: IO ()
-main = runUnderlying @'[Teletype] echoIO
+main = runUnderlying @'[Teletype] echoIO & runImpureProgram
 
 spec :: Spec
 spec = do

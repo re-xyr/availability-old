@@ -1,9 +1,7 @@
-module Availability.Embed (Embed (..), embed, Unembed (..), withUnembed, makeEffViaMonadIO,
-                           makeEffViaMonadUnliftIO) where
+module Availability.Embed (Embed (..), embed, Unembed (..), withUnembed, ViaMonadIO (..), ViaMonadUnliftIO (..)) where
 
 import           Availability
-import           Language.Haskell.TH
-import qualified UnliftIO            as MTL
+import           UnliftIO     (MonadIO (liftIO), MonadUnliftIO (withRunInIO))
 
 data Embed (m' :: * -> *) :: Effect where
   Embed :: m' a -> Embed m' m a
@@ -19,20 +17,18 @@ withUnembed :: forall m' m a b. Sendable (Unembed m') m => ((M m a -> m' a) -> m
 withUnembed f = send (WithUnembed f)
 {-# INLINE withUnembed #-}
 
-makeEffViaMonadIO :: Q Type -> Q [Dec]
-makeEffViaMonadIO mnd =
-  [d|
-  instance Interpret (Embed IO) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret (Embed m) = underlie $ MTL.liftIO m
-  |]
+newtype ViaMonadIO m a = ViaMonadIO (m a)
+  deriving (Functor, Applicative, Monad, MonadIO)
 
-makeEffViaMonadUnliftIO :: Q Type -> Q [Dec]
-makeEffViaMonadUnliftIO mnd =
-  [d|
-  instance Interpret (Unembed IO) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret (WithUnembed f) = underlie $ MTL.withRunInIO \unlift -> f (unlift . runM)
-  |]
+instance MonadIO m => Interpret (Embed IO) (ViaMonadIO m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret (Embed m) = underlie $ liftIO m
+
+newtype ViaMonadUnliftIO m a = ViaMonadUnliftIO (m a)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadUnliftIO)
+
+instance MonadUnliftIO m => Interpret (Unembed IO) (ViaMonadUnliftIO m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret (WithUnembed f) = underlie $ withRunInIO \unlift -> f (unlift . runM)

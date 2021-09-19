@@ -1,17 +1,17 @@
-module Availability.State (Getter (..), get, Putter (..), put, PutterKV (..), putKV, DeleterKV (..), delKV,
-                           state, modify, modify', makePutterFromLens, makePutterKVFromLens, makeDeleterKVFromLens,
-                           makeStateByIORef, makeGetterFromLens, makeGetterKVFromLens, makeEffViaMonadState,
-                           makeStateFromLens, makeStateKVFromLens, makeLocallyByState) where
+module Availability.State (Getter (..), get, Putter (..), put, PutterKV (..), putKV, DeleterKV (..), delKV, state,
+                           modify, modify', ViaMonadState (..), StateByIORef (..), LocallyByState (..)) where
 
 import           Availability
 import           Availability.Embed
+import           Availability.Lens
 import           Availability.Reader
-import           Control.Monad.Catch (bracket)
-import qualified Control.Monad.State as MTL
-import           Data.IORef          (IORef, readIORef, writeIORef)
-import           Language.Haskell.TH (Dec, Exp, Q, Type)
-import           Lens.Micro          ((&), (.~), (?~))
-import qualified Lens.Micro          as Lens
+import           Control.Lens          (At (at), Index, IxValue, (&), (.~), (?~))
+import           Control.Monad.Catch   (bracket)
+import qualified Control.Monad.Catch   as MTL
+import qualified Control.Monad.State   as MTL
+import           Control.Monad.Trans   (MonadIO (liftIO))
+import           Data.Generics.Product (HasAny (the))
+import           Data.IORef            (IORef, readIORef, writeIORef)
 
 data Putter tag s :: Effect where
   Put :: s -> Putter tag s m ()
@@ -54,95 +54,84 @@ modify' f = do
   put @tag $! f x
 {-# INLINABLE modify' #-}
 
-makePutterFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type -> Q [Dec]
-makePutterFromLens tag typ otag otyp lens mnd =
-  [d|
-  instance Interpret (Putter $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Getter $otag $otyp, Putter $otag $otyp]
-    {-# INLINABLE interpret #-}
-    interpret (Put x) = do
-      s <- get @($otag) @($otyp)
-      put @($otag) @($otyp) (s & $lens .~ x)
-  |]
+instance (Interprets '[Getter otag r, Putter otag r] m, HasAny sel r r s s) =>
+  Interpret (Putter tag s) (FromHas sel otag r m) where
+  type InTermsOf _ _ = '[Getter otag r, Putter otag r]
+  {-# INLINABLE interpret #-}
+  interpret (Put x) = coerceM @m $ do
+    r <- get @otag @r
+    put @otag @r (r & the @sel .~ x)
 
-makePutterKVFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
-makePutterKVFromLens tag ktyp vtyp otag otyp mnd =
-  [d|
-  instance Interpret (PutterKV $tag $ktyp $vtyp) $mnd where
-    type InTermsOf _ _ = '[Getter $otag $otyp, Putter $otag $otyp]
-    {-# INLINABLE interpret #-}
-    interpret (PutKV k v) = do
-      s <- get @($otag) @($otyp)
-      put @($otag) @($otyp) (s & Lens.at k ?~ v)
-  |]
+instance (Interprets '[Getter otag r, Putter otag r] m, At r, k ~ Index r, v ~ IxValue r) =>
+  Interpret (PutterKV tag k v) (FromAt otag r m) where
+  type InTermsOf _ _ = '[Getter otag r, Putter otag r]
+  {-# INLINABLE interpret #-}
+  interpret (PutKV k v) = coerceM @m do
+    r <- get @otag @r
+    put @otag @r (r & at k ?~ v)
 
-makeDeleterKVFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
-makeDeleterKVFromLens tag ktyp vtyp otag otyp mnd =
-  [d|
-  instance Interpret (DeleterKV $tag $ktyp $vtyp) $mnd where
-    type InTermsOf _ _ = '[Getter $otag $otyp, Putter $otag $otyp]
-    {-# INLINABLE interpret #-}
-    interpret (DelKV k) = do
-      s <- get @($otag) @($otyp)
-      put @($otag) @($otyp) (s & Lens.at k .~ Nothing)
-  |]
+instance (Interprets '[Getter otag r, Putter otag r] m, At r, k ~ Index r, v ~ IxValue r) =>
+  Interpret (DeleterKV tag k v) (FromAt otag r m) where
+  type InTermsOf _ _ = '[Getter otag r, Putter otag r]
+  {-# INLINABLE interpret #-}
+  interpret (DelKV k) = coerceM @m do
+    r <- get @otag @r
+    put @otag @r (r & at k .~ Nothing)
 
-makeEffViaMonadState :: Q Type -> Q Type -> Q Type -> Q [Dec]
-makeEffViaMonadState tag typ mnd =
-  [d|
-  instance Interpret (Getter $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret Get = underlie MTL.get
+newtype ViaMonadState m a = ViaMonadState (m a)
+  deriving (Functor, Applicative, Monad, MonadIO, MTL.MonadState s)
+deriving instance Interpret (Embed IO) m => Interpret (Embed IO) (ViaMonadState m)
 
-  instance Interpret (Putter $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret (Put x) = underlie $ MTL.put x
-  |]
+instance MTL.MonadState s m => Interpret (Getter tag s) (ViaMonadState m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret Get = underlie MTL.get
 
-makeStateByIORef :: Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
-makeStateByIORef tag typ otag mnd =
-  [d|
-  instance Interpret (Getter $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Getter $otag (IORef $typ), Embed IO]
-    {-# INLINABLE interpret #-}
-    interpret Get = do
-      r <- get @($otag)
-      embed $ readIORef r
+instance MTL.MonadState s m => Interpret (Putter tag s) (ViaMonadState m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret (Put x) = underlie $ MTL.put x
 
-  instance Interpret (Putter $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Getter $otag (IORef $typ), Embed IO]
-    {-# INLINABLE interpret #-}
-    interpret (Put x) = do
-      r <- get @($otag)
-      embed $ writeIORef r x
-  |]
+newtype StateByIORef otag s m a = StateByIORef (m a)
+  deriving (Functor, Applicative, Monad, MonadIO)
+deriving instance Interpret (Embed IO) m => Interpret (Embed IO) (StateByIORef otag s m)
 
-makeStateFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type -> Q [Dec]
-makeStateFromLens tag typ otag otyp lens mnd = concat <$> sequence
-  [ makeGetterFromLens tag typ otag otyp lens mnd
-  , makePutterFromLens tag typ otag otyp lens mnd
-  ]
+instance Interprets '[Getter otag (IORef s), Embed IO] m => Interpret (Getter tag s) (StateByIORef otag s m) where
+  type InTermsOf _ _ = '[Getter otag (IORef s), Embed IO]
+  {-# INLINABLE interpret #-}
+  interpret Get = coerceM @m $ do
+    r <- get @otag
+    embed $ readIORef r
 
-makeStateKVFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
-makeStateKVFromLens tag k v otag otyp mnd = concat <$> sequence
-  [ makeGetterKVFromLens tag k v otag otyp mnd
-  , makePutterKVFromLens tag k v otag otyp mnd
-  , makeDeleterKVFromLens tag k v otag otyp mnd
-  ]
+newtype StateByIORef' otag s m a = StateByIORef' (m a)
+  deriving (Functor, Applicative, Monad, MonadIO)
+deriving instance Interpret (Embed IO) m => Interpret (Embed IO) (StateByIORef' otag s m)
 
--- This is not thread safe + requires MonadMask.
-makeLocallyByState :: Q Type -> Q Type -> Q Type -> Q [Dec]
-makeLocallyByState tag typ mnd =
-  [d|
-  instance Interpret (Locally $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Getter $tag $typ, Putter $tag $typ, Underlying]
-    {-# INLINABLE interpret #-}
-    interpret (Local f m) = do
-      s <- get @($tag) @($typ)
-      underlie $ bracket
-        (runM $ modify @($tag) f)
-        (const $ runM $ put @($tag) @($typ) s)
-        (const $ runUnderlying @'[Getter $tag $typ] m)
-  |]
+instance (Interprets '[Getter otag (IORef s)] m, MonadIO m) => Interpret (Getter tag s) (StateByIORef' otag s m) where
+  type InTermsOf _ _ = '[Getter otag (IORef s), Underlying]
+  {-# INLINABLE interpret #-}
+  interpret Get = coerceM @m $ do
+    r <- get @otag
+    underlie $ liftIO $ readIORef r
+
+instance Interprets '[Getter otag (IORef s), Embed IO] m => Interpret (Putter tag s) (StateByIORef otag s m) where
+  type InTermsOf _ _ = '[Getter otag (IORef s), Embed IO]
+  {-# INLINABLE interpret #-}
+  interpret (Put x) = coerceM @m $ do
+    r <- get @otag
+    embed $ writeIORef r x
+
+newtype LocallyByState tag s m a = LocallyByState (m a)
+  deriving (Functor, Applicative, Monad, MonadIO)
+
+-- This is not safe + requires MonadMask. You really won't want to do this.
+instance (MTL.MonadMask m, Interprets '[Getter tag s, Putter tag s, Underlying] m) =>
+  Interpret (Locally tag s) (LocallyByState tag s m) where
+  type InTermsOf _ _ = '[Getter tag s, Putter tag s, Underlying]
+  {-# INLINABLE interpret #-}
+  interpret (Local f m) = coerceM @m do
+    s <- get @tag @s
+    underlie $ bracket
+      (runM $ modify @tag f)
+      (const $ runM $ put @tag @s s)
+      (const $ runUnderlying @'[Getter tag s] $ coerceM' @m m)

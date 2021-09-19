@@ -16,15 +16,15 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/daylily/availability#readme>
+description:         Please see the README on GitHub at <https://github.com/re-xyr/availability#readme>
 
 dependencies:
 - base
 - mtl
-- microlens
+- lens
+- generic-lens
 - exceptions
 - unliftio
-- template-haskell
 
 ghc-options:
 - -Wall
@@ -47,10 +47,11 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - availability
-    - microlens-th
     - hspec
     - QuickCheck
     - silently
+    default-extensions:
+    - DeriveGeneric
 
 default-extensions:
 - AllowAmbiguousTypes
@@ -62,11 +63,13 @@ default-extensions:
 - FlexibleInstances
 - GADTs
 - GeneralizedNewtypeDeriving
+- DerivingVia
 - LambdaCase
 - MultiParamTypeClasses
 - PolyKinds
 - RankNTypes
 - ScopedTypeVariables
+- StandaloneDeriving
 - TemplateHaskell
 - TypeApplications
 - TypeFamilies

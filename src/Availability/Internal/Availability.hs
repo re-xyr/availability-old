@@ -1,6 +1,7 @@
 {-# OPTIONS_HADDOCK not-home #-}
 module Availability.Internal.Availability where
 
+import           Data.Coerce   (Coercible, coerce)
 import           Data.Kind     (Constraint)
 import           Data.Proxy    (Proxy (Proxy))
 import           Unsafe.Coerce (unsafeCoerce)
@@ -15,6 +16,29 @@ import           Unsafe.Coerce (unsafeCoerce)
 newtype M m a = UnsafeLift
   { runM :: m a -- ^ Unwrap and obtain the inner monad.
   } deriving (Functor, Applicative, Monad)
+
+-- | Coerce between underlying monads that are coercible. Practically, this means coercing to and from newtypes over
+-- monads. This function is especially useful in creating "interpretation strategies", /i.e./ newtype wrappers
+-- that extends a monad with a few instances, intended to be used with @DerivingVia@:
+--
+-- @
+-- newtype GetterFromIORef otag m a = GetterFromIORef (m a)
+--   deriving ('Functor', 'Applicative', 'Monad')
+--
+-- instance 'Interprets' '['Availability.Reader.Getter' otag ('Data.IORef.IORef' a), 'Availability.Embed.Embed' 'IO'] m => 'Interpret' ('Availability.Reader.Getter' tag a) m where
+--   type 'InTermsOf' _ _ = '['Availability.Reader.Getter' otag ('Data.IORef.IORef' a), 'Availability.Embed.Embed' 'IO']
+--   'interpret' 'Availability.Reader.Get' = 'coerceM' \@m do
+--     ref <- 'Availability.Reader.get' \@otag
+--     'Availability.Embed.embed' $ 'Data.IORef.readIORef' ref
+-- @
+coerceM :: forall m n a. Coercible m n => M m a -> M n a
+coerceM = coerce
+{-# INLINE coerceM #-}
+
+-- | 'coerceM' with the order of the two monad type variables flipped.
+coerceM' :: forall n m a. Coercible m n => M m a -> M n a
+coerceM' = coerce
+{-# INLINE coerceM' #-}
 
 -- * The 'Eff' phantom constraint
 
@@ -85,7 +109,7 @@ instance Rip rs => Rip (r ': rs) where
 --
 -- The effect being interpreted can use a set of other more primitive effects by specifying them in the associated type
 -- @'InTermsOf' r m@.
-class (Monad m, Rip (InTermsOf r m), Interprets (InTermsOf r m) m) => Interpret r m where
+class (Monad m, Rip (InTermsOf r m)) => Interpret r m where
   {-# MINIMAL interpret #-}
 
   -- | The more primitive effects that @r@ is interpreted into.
@@ -140,6 +164,11 @@ derives = rips @rs
 -- performing an effect 'r' on monad 'm'.
 type Sendable r m = (Eff r, Interpret r m)
 
+-- | A convenient alias constraint for @('Sendable r1 m', ..., 'Sendable' rn m)@.
+type family Sendables rs m :: Constraint where
+  Sendables '[] _ = ()
+  Sendables (r ': rs) m = (Sendable r m, Sendables rs m)
+
 -- | Perform an effect in the monad, given the 'Eff' constraint is in the context, and the effect can be interpreted
 -- in terms of the monad. This is the basic way how you do effectful operations.
 --
@@ -173,7 +202,7 @@ send = rips @(InTermsOf r m) interpret
 -- (i.e. the underlying monad itself).
 data Underlying :: Effect
 
-instance Monad m => Interpret Underlying m where
+instance {-# OVERLAPPING #-} Monad m => Interpret Underlying m where
   type InTermsOf Underlying m = '[]
   interpret = \case
 

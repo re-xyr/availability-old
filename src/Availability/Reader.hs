@@ -1,14 +1,14 @@
 module Availability.Reader (Getter (..), get, gets, GetterKV (..), getKV, getsKV, Locally (..), local, reader,
-                            makeEffViaMonadReader, makeGetterFromLens, makeLocallyFromLens, makeReaderFromLens,
-                            makeGetterKVFromLens) where
+                            ViaMonadReader (..)) where
 
 import           Availability
-import           Control.Monad        (join)
-import qualified Control.Monad.Reader as MTL
-import           Data.Function        ((&))
-import           Language.Haskell.TH  (Dec, Exp, Q, Type)
-import           Lens.Micro           ((%~), (^.))
-import qualified Lens.Micro           as Lens
+import           Availability.Embed
+import           Availability.Lens
+import           Control.Lens          (At (at), Index, IxValue, (%~), (^.))
+import qualified Control.Monad.Reader  as MTL
+import           Control.Monad.Trans   (MonadIO)
+import           Data.Function         ((&))
+import           Data.Generics.Product (HasAny (the))
 
 data Getter tag s :: Effect where
   Get :: Getter tag s m s
@@ -43,53 +43,35 @@ reader :: forall tag s m a. (Sendable (Getter tag s) m) => (s -> a) -> M m a
 reader f = f <$> get @tag
 {-# INLINE reader #-}
 
-makeGetterFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type -> Q [Dec]
-makeGetterFromLens tag typ otag otyp lens mnd =
-  [d|
-  instance Interpret (Getter $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Getter $otag $otyp]
-    {-# INLINABLE interpret #-}
-    interpret Get = do
-      s <- get @($otag) @($otyp)
-      pure (s ^. $lens)
-  |]
+instance (Interprets '[Getter otag r] m, HasAny sel r r s s) => Interpret (Getter tag s) (FromHas sel otag r m) where
+  type InTermsOf _ _ = '[Getter otag r]
+  {-# INLINABLE interpret #-}
+  interpret Get = coerceM @m $ do
+    r <- get @otag @r
+    pure (r ^. the @sel)
 
-makeLocallyFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type -> Q [Dec]
-makeLocallyFromLens tag typ otag otyp lens mnd =
-  [d|
-  instance Interpret (Locally $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Locally $otag $otyp, Getter $tag $typ]
-    {-# INLINE interpret #-}
-    interpret (Local f m) = local @($otag) @($otyp) (\x -> x & $lens %~ f) m
-  |]
+instance (Interprets '[Locally otag r, Getter tag s] m, HasAny sel r r s s) =>
+  Interpret (Locally tag s) (FromHas sel otag r m) where
+  type InTermsOf _ _ = '[Locally otag r, Getter tag s]
+  interpret (Local f m) = coerceM @m $ local @otag @r (\x -> x & (the @sel) %~ f) (coerceM' @m m)
 
-makeReaderFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type -> Q [Dec]
-makeReaderFromLens tag typ otag otyp lens mnd = join <$> sequence
-  [ makeGetterFromLens tag typ otag otyp lens mnd
-  , makeLocallyFromLens tag typ otag otyp lens mnd
-  ]
+instance (Interprets '[Getter otag r] m, At r, k ~ Index r, v ~ IxValue r) =>
+  Interpret (GetterKV tag k v) (FromAt otag r m) where
+  type InTermsOf _ _ = '[Getter otag r]
+  interpret (GetKV k) = coerceM @m do
+    r <- get @otag @r
+    pure (r ^. at k)
 
-makeGetterKVFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q Type -> Q [Dec]
-makeGetterKVFromLens tag ktyp vtyp otag otyp mnd =
-  [d|
-  instance Interpret (GetterKV $tag $ktyp $vtyp) $mnd where
-    type InTermsOf _ _ = '[Getter $otag $otyp]
-    {-# INLINABLE interpret #-}
-    interpret (GetKV k) = do
-      s <- get @($otag) @($otyp)
-      pure (s ^. Lens.at k)
-  |]
+newtype ViaMonadReader m a = ViaMonadReader (m a)
+  deriving (Functor, Applicative, Monad, MonadIO, MTL.MonadReader r)
+deriving instance Interpret (Embed IO) m => Interpret (Embed IO) (ViaMonadReader m)
 
-makeEffViaMonadReader :: Q Type -> Q Type -> Q Type -> Q [Dec]
-makeEffViaMonadReader tag typ mnd =
-  [d|
-  instance Interpret (Getter $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret Get = underlie MTL.ask
+instance MTL.MonadReader r m => Interpret (Getter tag r) (ViaMonadReader m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret Get = underlie MTL.ask
 
-  instance Interpret (Locally $tag $typ) $mnd where
-    type InTermsOf _ _ = '[Underlying]
-    {-# INLINE interpret #-}
-    interpret (Local f m) = underlie $ MTL.local f (runUnderlying @'[Getter $tag $typ] m)
-  |]
+instance MTL.MonadReader r m => Interpret (Locally tag r) (ViaMonadReader m) where
+  type InTermsOf _ _ = '[Underlying]
+  {-# INLINE interpret #-}
+  interpret (Local f m) = underlie $ MTL.local f (runUnderlying @'[Getter tag r] m)

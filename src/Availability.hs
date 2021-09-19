@@ -22,10 +22,9 @@
 -- can only be removed all at once, obtaining the underlying monad, via the 'runUnderlying' function:
 --
 -- @
--- data Ctx = Ctx { _foo :: 'Int', _bar :: 'Data.IORef.IORef' 'Bool' }
--- makeLenses ''Ctx
+-- data Ctx = Ctx { foo :: 'Int', bar :: 'Data.IORef.IORef' 'Bool' } deriving ('GHC.Generics.Generic')
 --
--- type App = 'Control.Monad.Reader.ReaderT' Ctx 'IO'
+-- newtype App = App { runApp :: 'Control.Monad.Reader.ReaderT' Ctx 'IO' }
 --
 -- testParity :: ('Effs' '['Availability.Reader.Getter' "foo" 'Int', 'Availability.State.Putter' "bar" 'Bool']) => 'M' App ()
 -- testParity = do
@@ -36,28 +35,36 @@
 -- example = do
 --   rEven <- 'Data.IORef.newIORef' 'False'
 --   'runUnderlying' \@'['Availability.Reader.Getter' "foo" 'Int', 'Availability.State.Putter' "bar" 'Bool'] testParity
---     'Data.Function.&' (\`Control.Monad.Reader.runReaderT\` Ctx 2 rEven)
+--     'Data.Function.&' runApp
+--     'Data.Function.&' (\`'Control.Monad.Reader.runReaderT'\` Ctx 2 rEven)
 --   'Data.IORef.readIORef' rEven '>>=' 'print'
 -- @
 --
--- To provide interpretations to the effects, you can use the predefined TH functions:
+-- To provide interpretations to the effects, you can use the predefined /interpretation strategies/, i.e. newtypes
+-- that extends the monad with a few insteances, intended to be used with @DerivingVia@. You should attach the
+-- @deriving via@ clauses to the concrete monad definition:
 --
 -- @
--- 'Availability.Embed.makeEffViaMonadIO'                                                                  [t|App|]
--- 'Availability.Reader.makeEffViaMonadReader' [t|"ctx"   |] [t|Ctx       |]                                [t|App|]
--- 'Availability.Reader.makeReaderFromLens'    [t|"foo"   |] [t|'Int'       |] [t|"ctx"   |] [t|Ctx|] [|foo|] [t|App|]
--- 'Availability.Reader.makeReaderFromLens'    [t|"barRef"|] [t|'Data.IORef.IORef' 'Bool'|] [t|"ctx"   |] [t|Ctx|] [|bar|] [t|App|]
--- 'Availability.State.makeStateByIORef'      [t|"bar"   |] [t|'Bool'      |] [t|"barRef"|]                  [t|App|]
+-- newtype App = App { runApp :: 'Control.Monad.Reader.ReaderT' Ctx 'IO' }
+--   deriving ('Functor', 'Applicative', 'Monad', 'Control.Monad.Trans.MonadIO', 'Control.Monad.Reader.MonadReader' Ctx)
+--   deriving ('Interpret' 'Availability.Embed.Embed' 'IO')
+--     via 'Availability.Embed.ViaMonadIO' App
+--   deriving ('Interpret' 'Availability.Reader.Getter' "ctx" Ctx)
+--     via 'Availability.Reader.VIaMonadReader' App
+--   deriving ('Interpret' 'Availability.Reader.Getter' "foo" Int)
+--     via 'Availability.Lens.FromHas' "foo" "ctx" Ctx App
+--   deriving ('Interpret' 'Availability.State.Putter' "bar" Bool)
+--     via 'Availability.State.StateByIORef' () Bool ('Availability.Lens.FromHas' "bar" "ctx" Ctx App)
 -- @
 module Availability
   ( -- * The 'M' monad
-    M (runM)
+    M (runM), coerceM, coerceM'
   , -- * The phantom 'Eff' constraint
     Effect, Eff, Effs
   , -- * Interpreting effects
     Interpret (..), Interprets, derive, derives
   , -- * Performing effects
-    Sendable, send
+    Sendable, Sendables, send
   , -- * The 'Underlying' pseudo-effect
     Underlying, underlie
   , -- * Running effects

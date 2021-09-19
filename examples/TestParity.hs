@@ -2,25 +2,28 @@ module TestParity where
 
 import           Availability
 import           Availability.Embed
+import           Availability.Lens
 import           Availability.Reader
 import           Availability.State
-import           Control.Monad.Reader    (ReaderT (runReaderT))
+import           Control.Monad.Reader    (MonadIO, MonadReader, ReaderT (runReaderT))
 import           Data.Function           ((&))
 import           Data.IORef              (IORef, newIORef, readIORef)
-import           Lens.Micro.TH           (makeLenses)
+import           GHC.Generics
 import           Test.Hspec              (Spec, it)
 import           Test.QuickCheck         (Testable (property))
 import           Test.QuickCheck.Monadic (assert, monadicIO, run)
 
-data Ctx = Ctx { _foo :: Int, _bar :: IORef Bool }
-makeLenses ''Ctx
+data Ctx = Ctx { foo :: Int, bar :: IORef Bool } deriving (Generic)
 
-type App = ReaderT Ctx IO
-makeEffViaMonadIO                                                                  [t|App|]
-makeEffViaMonadReader [t|"ctx"   |] [t|Ctx       |]                                [t|App|]
-makeReaderFromLens    [t|"foo"   |] [t|Int       |] [t|"ctx"   |] [t|Ctx|] [|foo|] [t|App|]
-makeReaderFromLens    [t|"barRef"|] [t|IORef Bool|] [t|"ctx"   |] [t|Ctx|] [|bar|] [t|App|]
-makeStateByIORef      [t|"bar"   |] [t|Bool      |] [t|"barRef"|]                  [t|App|]
+newtype App a = App { runApp :: ReaderT Ctx IO a }
+  deriving (Functor, Applicative, Monad)
+  deriving (MonadIO, MonadReader Ctx)
+  deriving (Interpret (Embed IO))
+    via ViaMonadIO App
+  deriving (Interpret (Getter "foo" Int))
+    via FromHas "foo" () Ctx (ViaMonadReader App)
+  deriving (Interpret (Putter "bar" Bool))
+    via StateByIORef () Bool (FromHas "bar" () Ctx (ViaMonadReader App))
 
 testParity :: (Effs '[Getter "foo" Int, Putter "bar" Bool]) => M App ()
 testParity = do
@@ -32,6 +35,7 @@ spec = it "tests parity" do
   property \n -> monadicIO do
     rEven <- run $ newIORef False
     run $ runUnderlying @'[Getter "foo" Int, Putter "bar" Bool] testParity
+      & runApp
       & (`runReaderT` Ctx n rEven)
     b <- run $ readIORef rEven
     assert (b == even n)

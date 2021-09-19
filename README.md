@@ -2,10 +2,10 @@
 
 `availability` is an unconventional effects library. It lets user provide a fixed concrete monad for all effectful functions in an application, and attach effects to the monads in an easy way.
 
-- It is very lightweight ([~60 sloc core](https://github.com/re-xyr/availability/blob/master/src/Availability/Internal/Availability.hs)), easy to understand and [fast](#performance).
+- It is very lightweight ([~70 sloc core](https://github.com/re-xyr/availability/blob/master/src/Availability/Internal/Availability.hs)), easy to understand and [fast](#performance).
 - It works with existing ecosystem, like [`mtl`](https://hackage.haskell.org/package/mtl) and [`lens`](https://hackage.haskell.org/package/lens).
 - You can use the expressive [`ReaderT` pattern](https://www.fpcomplete.com/blog/2017/06/readert-design-pattern) conveniently.
-- You can derive effects from each other via predefined TH functions, e.g. it takes one line to derive `Getter a, Setter a` from `Getter (IORef a)`.
+- You can derive effects from each other via predefined *interpretation strategies*, i.e. newtypes that extends a monad with a few instances. For example, it takes one line to derive `Getter a, Setter a` from `Getter (IORef a)`.
 
 Current effects libraries has one principle of effect restriction: an effect can be used in a monad if it can be interpreted in terms of the monad. This works well with a polymorphic monad type, but a polymorphic type is unfriendly to compiler optimization. In contrast, a concrete monad can be easily optimized, but if fix a monad that supplies all effects we need, we can no longer restrict what effects each function can use.
 
@@ -17,15 +17,16 @@ Current effects libraries has one principle of effect restriction: an effect can
 The second requirement decouples the availability of effects from the monad implementation. At last, we use a function `runUnderlying` to clear the constraints and restore the underlying monad. A typical example looks like this:
 
 ```haskell
-data Ctx = Ctx { _foo :: Int, _bar :: IORef Bool }
-makeLenses ''Ctx
+data Ctx = Ctx { foo :: Int, bar :: IORef Bool } deriving (Generic)
 
-type App = ReaderT Ctx IO
-makeEffViaMonadIO     [t|App|]
-makeEffViaMonadReader [t|"ctx"   |] [t|Ctx       |] [t|App|]
-makeReaderFromLens    [t|"foo"   |] [t|Int       |] [t|"ctx"   |] [t|Ctx|] [|foo|] [t|App|]
-makeReaderFromLens    [t|"barRef"|] [t|IORef Bool|] [t|"ctx"   |] [t|Ctx|] [|bar|] [t|App|]
-makeStateByIORef      [t|"bar"   |] [t|Bool      |] [t|"barRef"|] [t|App|]
+newtype App a = App { runApp :: ReaderT Ctx IO a }
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader Ctx)
+  deriving (Interpret (Embed IO))
+    via ViaMonadIO App
+  deriving (Interpret (Getter "foo" Int))
+    via FromHas "foo" () Ctx (ViaMonadReader App)
+  deriving (Interpret (Putter "bar" Bool))
+    via StateByIORef () Bool (FromHas "bar" () Ctx (ViaMonadReader App))
 
 testParity :: (Effs '[Getter "foo" Int, Putter "bar" Bool]) => M App ()
 testParity = do
@@ -36,10 +37,10 @@ example :: IO ()
 example = do
     rEven <- newIORef False
     runUnderlying @'[Getter "foo" Int, Putter "bar" Bool] testParity
-      & (`runReaderT` Ctx 2 rEven)
+      & runApp & (`runReaderT` Ctx 2 rEven)
     readIORef rEven >>= print
     runUnderlying @'[Getter "foo" Int, Putter "bar" Bool] testParity
-      & (`runReaderT` Ctx 3 rEven)
+      & runApp & (`runReaderT` Ctx 3 rEven)
     readIORef rEven >>= print
 ```
 
@@ -98,12 +99,15 @@ import           Availability.Writer
 import qualified Control.Monad.State                  as MTL
 import qualified Control.Monad.Writer                 as MTL
 import           Data.Function                        ((&))
-import           Data.Maybe                           (fromMaybe)
 
-type PureProgram = MTL.WriterT [String] (MTL.State [String])
-
-makeEffViaMonadWriter [t|"out"|] [t|[String]|] [t|PureProgram|]
-makeEffViaMonadState  [t|"in" |] [t|[String]|] [t|PureProgram|]
+newtype PureProgram a = PureProgram
+  { runPureProgram :: MTL.WriterT [String] (MTL.State [String]) a }
+  deriving (Functor, Applicative, Monad)
+  deriving (MTL.MonadWriter [String], MTL.MonadState [String])
+  deriving (Interpret (Teller "out" [String]))
+    via ViaMonadWriter PureProgram
+  deriving (Interpret (Getter "in" [String]), Interpret (Putter "in" [String]))
+    via ViaMonadState PureProgram
 
 instance Interpret Teletype PureProgram where
   type InTermsOf _ _ = '[Getter "in" [String], Putter "in" [String], Teller "out" [String]]
@@ -121,7 +125,8 @@ echoPure = do
     _  -> writeTTY i >> echoPure
 
 runEchoPure :: [String] -> [String]
-runEchoPure s = runUnderlying @'[Teletype] echoPure & MTL.execWriterT & (`MTL.evalState` s)
+runEchoPure s = runUnderlying @'[Teletype] echoPure
+  & runPureProgram & MTL.execWriterT & (`MTL.evalState` s)
 ```
 
 or an impure interpretation directly through `IO`.
@@ -130,15 +135,18 @@ or an impure interpretation directly through `IO`.
 import           Availability.Embed
 import           Availability
 
-makeEffViaMonadIO [t|IO|]
+newtype ImpureProgram a = ImpureProgram { runImpureProgram :: IO a }
+  deriving (Functor, Applicative, Monad, MonadIO)
+  deriving (Interpret (Embed IO)) 
+    via ViaMonadIO ImpureProgram
 
-instance Interpret Teletype IO where
+instance Interpret Teletype ImpureProgram where
   type InTermsOf _ _ = '[Embed IO]
   interpret = \case
     ReadTTY      -> embed getLine
     WriteTTY msg -> embed $ putStrLn msg
 
-echoIO :: Eff Teletype => M IO ()
+echoIO :: Eff Teletype => M ImpureProgram ()
 echoIO = do
   i <- readTTY
   case i of
@@ -146,7 +154,7 @@ echoIO = do
     _  -> writeTTY i >> echoIO
 
 main :: IO ()
-main = runUnderlying @'[Teletype] echoIO
+main = runUnderlying @'[Teletype] echoIO & runImpureProgram
 ```
 
 ## Limitations
@@ -161,7 +169,4 @@ main = runUnderlying @'[Teletype] echoIO
   - To simulate `runStateT`, simply set the value before the action and get the value after it.
   - `listen` is a very close analog to `runWriterT`.
 
-  The same problem is present in Tweag's [`capability`](https://hackage.haskell.org/package/capability), whose implementation is in some aspects similar to this library.
-
-- Orphan instances: 
-  Directly deriving instances on type aliases (like `type App = ReaderT Global IO`) via TH functions will lead to a warning of orphan instances. This is generally not a problem within `availability` because all defined instances are only expected to be used in current project. There are two choices: Either add the GHC option `-Wno-orphans` to the module using TH functions or use a `newtype` to wrap the transformer stack (you may need to derive `MonadIO`, `MonadReader` etc via `GeneralizedNewtypeDeriving`).
+  The same problem is present in Tweag's [`capability`](https://hackage.haskell.org/package/capability), whose implementation is in many aspects similar to this library.
