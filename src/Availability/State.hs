@@ -1,5 +1,5 @@
 module Availability.State (Getter (..), get, Putter (..), put, PutterKV (..), putKV, DeleterKV (..), delKV,
-                           state, modify, makePutterFromLens, makePutterKVFromLens, makeDeleterKVFromLens,
+                           state, modify, modify', makePutterFromLens, makePutterKVFromLens, makeDeleterKVFromLens,
                            makeStateByIORef, makeGetterFromLens, makeGetterKVFromLens, makeEffViaMonadState,
                            makeStateFromLens, makeStateKVFromLens, makeLocallyByState) where
 
@@ -47,6 +47,12 @@ modify f = do
   x <- get @tag
   put @tag (f x)
 {-# INLINABLE modify #-}
+
+modify' :: forall tag s m. (Sendable (Getter tag s) m, Sendable (Putter tag s) m, Monad m) => (s -> s) -> M m ()
+modify' f = do
+  x <- get @tag
+  put @tag $! f x
+{-# INLINABLE modify' #-}
 
 makePutterFromLens :: Q Type -> Q Type -> Q Type -> Q Type -> Q Exp -> Q Type -> Q [Dec]
 makePutterFromLens tag typ otag otyp lens mnd =

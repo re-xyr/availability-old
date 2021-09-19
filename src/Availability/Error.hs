@@ -1,4 +1,4 @@
-module Availability.Error (Thrower (..), throwError, liftEither, Catcher (..), catchError, tryError,
+module Availability.Error (Thrower (..), throwError, liftEither, Catcher (..), catchError, catchJust, tryError,
                            makeEffViaMonadError, makeEffViaMonadThrow, makeEffViaMonadCatch) where
 
 import           Availability
@@ -27,6 +27,13 @@ newtype AvailabilityException e = AvailabilityException { runException :: e }
 catchError :: forall e m a. Sendable (Catcher e) m => (Eff (Thrower e) => M m a) -> (e -> M m a) -> M m a
 catchError m h = send (CatchError @_ @_ @_ m h)
 {-# INLINE catchError #-}
+
+catchJust :: forall e m b a. (Sendable (Thrower e) m, Sendable (Catcher e) m) =>
+  (e -> Maybe b) -> M m a -> (b -> M m a) -> M m a
+catchJust f m h = m `catchError` \e -> case f e of
+  Nothing -> throwError e
+  Just b  -> h b
+{-# INLINE catchJust #-}
 
 tryError :: forall e m a. Sendable (Catcher e) m => (Eff (Thrower e) => M m a) -> M m (Either e a)
 tryError m = (Right <$> m) `catchError` \e -> pure $ Left e

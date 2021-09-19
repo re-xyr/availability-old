@@ -1,4 +1,4 @@
-module Availability.Reader (Getter (..), get, GetterKV (..), getKV, Locally (..), local, reader,
+module Availability.Reader (Getter (..), get, gets, GetterKV (..), getKV, getsKV, Locally (..), local, reader,
                             makeEffViaMonadReader, makeGetterFromLens, makeLocallyFromLens, makeReaderFromLens,
                             makeGetterKVFromLens) where
 
@@ -17,12 +17,20 @@ get :: forall tag s m. Sendable (Getter tag s) m => M m s
 get = send (Get @tag)
 {-# INLINE get #-}
 
+gets :: forall tag s t m. Sendable (Getter tag s) m => (s -> t) -> M m t
+gets f = f <$> get @tag
+{-# INLINE gets #-}
+
 data GetterKV tag k v :: Effect where
   GetKV :: k -> GetterKV tag k v m (Maybe v)
 
 getKV :: forall tag k v m. Sendable (GetterKV tag k v) m => k -> M m (Maybe v)
 getKV k = send (GetKV @_ @tag k)
 {-# INLINE getKV #-}
+
+getsKV :: forall tag k v u m. Sendable (GetterKV tag k v) m => (v -> u) -> k -> M m (Maybe u)
+getsKV f k = fmap f <$> getKV @tag k
+{-# INLINE getsKV #-}
 
 data Locally tag s :: Effect where
   Local :: (s -> s) -> (Eff (Getter tag s) => M m a) -> Locally tag s m a

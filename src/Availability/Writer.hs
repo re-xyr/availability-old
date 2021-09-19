@@ -2,7 +2,7 @@ module Availability.Writer (Teller (..), tell, Listener (..), listen, pass, make
                             makeTellerByList, makeTellerByMonoid) where
 
 import           Availability
-import           Availability.State   (Getter, Putter, modify)
+import           Availability.State   (Getter, Putter, modify')
 import qualified Control.Monad.Writer as MTL
 import           Language.Haskell.TH
 
@@ -45,7 +45,7 @@ makeTellerByList tag typ otag mnd =
   [d|
   instance Interpret (Teller $tag $typ) $mnd where
     type InTermsOf _ _ = '[Getter $otag [$typ], Putter $otag [$typ]]
-    interpret (Tell x) = modify @() (x :)
+    interpret (Tell x) = modify' @() (x :)
   |]
 
 -- Note that Listener is not thread safe in this instance.
@@ -55,7 +55,7 @@ makeTellerByMonoid tag typ otag mnd =
   instance Interpret (Teller $tag $typ) $mnd where
     type InTermsOf _ _ = '[Getter $otag $typ, Putter $otag $typ]
     {-# INLINE interpret #-}
-    interpret (Tell x) = modify @($otag) (<> x)
+    interpret (Tell x) = modify' @($otag) (<> x)
   |]
 
 -- instance Interpret (Listener $tag $typ) $mnd where
