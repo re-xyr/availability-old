@@ -107,10 +107,10 @@ type family Interprets rs m :: Constraint where
 --
 -- @
 -- instace 'Interpret' ('Availability.Reader.Getter' "myA" A) MyM where
---   type 'InTermsOf' _ _ = '['Availability.Reader.Getter' "refA" (IORef A), 'Availability.Embed.Embed' IO]
+--   type 'InTermsOf' _ _ = '['Availability.Reader.Getter' "refA" ('Data.IORef.IORef' A), 'Availability.Embed.Embed' 'IO']
 --   ...
 --
--- f :: 'Effs' '['Availability.Reader.Getter' "refA" (IORef A), 'Availability.Embed.Embed' IO] => 'M' MyM A
+-- f :: 'Effs' '['Availability.Reader.Getter' "refA" ('Data.IORef.IORef' A), 'Availability.Embed.Embed' 'IO'] => 'M' MyM A
 -- f = 'derive' \@('Availability.Reader.Getter' "myA" A) $ 'Availability.Reader.get' \@"myA"
 -- @
 derive :: forall r m a. Interpret r m => (Eff r => M m a) -> (Effs (InTermsOf r m) => M m a)

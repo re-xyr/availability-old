@@ -22,35 +22,32 @@
 -- can only be removed all at once, obtaining the underlying monad, via the 'runUnderlying' function:
 --
 -- @
--- data Global = Global
---   { _myA :: A
---   , _myB :: IORef B
---   } deriving (Generic)
--- makeLenses ''Global
+-- data Ctx = Ctx { _foo :: 'Int', _bar :: 'Data.IORef.IORef' 'Bool' }
+-- makeLenses ''Ctx
 --
--- type App = ReaderT Global IO
+-- type App = 'Control.Monad.Reader.ReaderT' Ctx 'IO'
 --
--- f :: 'Eff' '['Availability.Reader.Getter' "myA" A, 'Availability.Reader.Getter' "myB" B, 'Availability.State.Putter' "myB" B] => 'M' App ()
--- f = do
---   x <- 'Availability.Reader.get' \@"myA"
---   y <- 'Availability.Reader.get' \@"myB"
---   'Availability.State.put' \@"myB" (doSomething x y)
---   ...
+-- testParity :: ('Effs' '['Availability.Reader.Getter' "foo" 'Int', 'Availability.State.Putter' "bar" 'Bool']) => 'M' App ()
+-- testParity = do
+--   num <- 'Availability.Reader.get' \@"foo" \@'Int'
+--   'Availability.State.put' \@"bar" ('even' num)
 --
--- main :: IO ()
--- main = do
---   refB <- newIORef someB
---   f & 'runUnderlying' @'['Availability.Reader.Getter' "myA" A, 'Availability.Reader.Getter' "myB" B, 'Availability.State.Putter' "myB" B]
---     & (\`runReaderT\` Global someA refB)
+-- example :: 'IO' ()
+-- example = do
+--   rEven <- 'Data.IORef.newIORef' 'False'
+--   'runUnderlying' \@'['Availability.Reader.Getter' "foo" 'Int', 'Availability.State.Putter' "bar" 'Bool'] testParity
+--     'Data.Function.&' (\`Control.Monad.Reader.runReaderT\` Ctx 2 rEven)
+--   'Data.IORef.readIORef' rEven '>>=' 'print'
 -- @
 --
 -- To provide interpretations to the effects, you can use the predefined TH functions:
 --
 -- @
--- 'Availability.Reader.makeEffViaMonadReader' [t| "global" |] [t| Global  |]                                         [t| App |]
--- 'Availability.Reader.makeGetterFromLens'    [t| "myA"    |] [t| A       |] [t| "global" |] [t| Global |] [| myA |] [t| App |]
--- 'Availability.Reader.makeGetterFromLens'    [t| "refB"   |] [t| IORef B |] [t| "global" |] [t| Global |] [| myB |] [t| App |]
--- 'Availability.State.makeStateFromIORef'    [t| "myB"    |] [t| B       |]                                         [t| App |]
+-- 'Availability.Embed.makeEffViaMonadIO'                                                                  [t|App|]
+-- 'Availability.Reader.makeEffViaMonadReader' [t|"ctx"   |] [t|Ctx       |]                                [t|App|]
+-- 'Availability.Reader.makeReaderFromLens'    [t|"foo"   |] [t|'Int'       |] [t|"ctx"   |] [t|Ctx|] [|foo|] [t|App|]
+-- 'Availability.Reader.makeReaderFromLens'    [t|"barRef"|] [t|'Data.IORef.IORef' 'Bool'|] [t|"ctx"   |] [t|Ctx|] [|bar|] [t|App|]
+-- 'Availability.State.makeStateByIORef'      [t|"bar"   |] [t|'Bool'      |] [t|"barRef"|]                  [t|App|]
 -- @
 module Availability
   ( -- * The 'M' monad
