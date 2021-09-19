@@ -1,2 +1,6 @@
 cradle:
   stack:
+  - path: "./src"
+    component: "availability:lib"
+  - path: "./examples"
+    component: "availability:test:availability-examples"

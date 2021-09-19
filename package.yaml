@@ -38,15 +38,19 @@ library:
   source-dirs: src
 
 tests:
-  availability-test:
-    main:                Spec.hs
-    source-dirs:         test
+  availability-examples:
+    main:                Main.hs
+    source-dirs:         examples
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
     - availability
+    - microlens-th
+    - hspec
+    - QuickCheck
+    - silently
 
 default-extensions:
 - AllowAmbiguousTypes
