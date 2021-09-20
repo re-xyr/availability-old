@@ -13,7 +13,6 @@ import           Test.Common             (withInput)
 import           Test.Hspec              (Spec, context, it)
 import           Test.QuickCheck         (Testable (property), elements, generate, listOf)
 import           Test.QuickCheck.Monadic (assert, monadicIO, run)
-import           UnliftIO.Concurrent     (threadDelay)
 
 -- Teletype Effect --
 
@@ -88,7 +87,6 @@ spec = do
       property $ monadicIO do
         xs <- run $ generate $ listOf $ listOf $ elements ['a'..'z']
         let xs' = filter (not . ('\n' `elem`)) xs ++ [""]
-        run $ threadDelay 10
         out <- run $ capture_ $ main `withInput` unlines xs'
         run $ print $ takeWhile (/= "") xs'
         run $ print $ lines out

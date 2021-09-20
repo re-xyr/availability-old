@@ -1,7 +1,7 @@
 module Availability.Embed (Embed (..), embed, Unembed (..), withUnembed, ViaMonadIO (..), ViaMonadUnliftIO (..)) where
 
 import           Availability
-import           UnliftIO     (MonadIO (liftIO), MonadUnliftIO (withRunInIO))
+import           Control.Monad.IO.Unlift (MonadIO (liftIO), MonadUnliftIO (withRunInIO))
 
 data Embed (m' :: * -> *) :: Effect where
   Embed :: m' a -> Embed m' m a
@@ -26,9 +26,9 @@ instance MonadIO m => Interpret (Embed IO) (ViaMonadIO m) where
   interpret (Embed m) = underlie $ liftIO m
 
 newtype ViaMonadUnliftIO m a = ViaMonadUnliftIO (m a)
-  deriving (Functor, Applicative, Monad, MonadIO, MonadUnliftIO)
+  deriving (Functor, Applicative, Monad, MonadIO)
 
 instance MonadUnliftIO m => Interpret (Unembed IO) (ViaMonadUnliftIO m) where
   type InTermsOf _ _ = '[Underlying]
   {-# INLINE interpret #-}
-  interpret (WithUnembed f) = underlie $ withRunInIO \unlift -> f (unlift . runM')
+  interpret (WithUnembed f) = coerceM @m $ underlie $ withRunInIO \unlift -> f (unlift . runM' . coerceM' @m)

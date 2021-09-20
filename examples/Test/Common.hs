@@ -2,10 +2,10 @@
 -- The use is under the premission of the BSD-3-Clause License (https://github.com/tweag/capability/blob/master/LICENSE.md).
 module Test.Common (withInput) where
 
-import           GHC.IO.Handle      (hDuplicate, hDuplicateTo)
+import           Control.Exception (bracket)
+import           GHC.IO.Handle     (hDuplicate, hDuplicateTo)
 import           System.IO
-import           UnliftIO.Exception (bracket)
-import           UnliftIO.Temporary (withSystemTempFile)
+import           System.IO.Temp    (withSystemTempFile)
 
 -- | Execute the given action with @stdin@ redirected to read the given input.
 withInput :: IO a -> String -> IO a

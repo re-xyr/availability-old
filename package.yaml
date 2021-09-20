@@ -6,6 +6,11 @@ author:              "daylily"
 maintainer:          "xy.r@outlook.com"
 copyright:           "2021 daylily"
 
+tested-with:
+- GHC == 8.8.4
+- GHC == 8.10.4
+- GHC == 8.10.7
+
 extra-source-files:
 - README.md
 - CHANGELOG.md
@@ -19,12 +24,12 @@ description: |
   standard effects and convenient combinators for deriving them in the existing ecosystem.
 
 dependencies:
-- base
-- mtl
-- lens
-- generic-lens
-- exceptions
-- unliftio
+- base >= 4.13 && < 5
+- exceptions >= 0.10 && < 0.11
+- generic-lens >= 1.2 && < 2.3
+- lens >= 4.18 && < 5.1
+- mtl >= 2.2 && < 2.3
+- unliftio-core >= 0.1 && < 0.3
 
 ghc-options:
 - -Wall
@@ -32,7 +37,6 @@ ghc-options:
 - -Wpartial-fields
 - -Wincomplete-record-updates
 - -Widentities
-- -O2
 
 library:
   source-dirs: src
@@ -50,6 +54,7 @@ tests:
     - hspec
     - QuickCheck
     - silently
+    - temporary
     default-extensions:
     - DeriveGeneric
 
@@ -58,19 +63,19 @@ default-extensions:
 - BlockArguments
 - ConstraintKinds
 - DataKinds
+- DerivingVia
 - EmptyCase
 - FlexibleContexts
 - FlexibleInstances
 - GADTs
 - GeneralizedNewtypeDeriving
-- DerivingVia
 - LambdaCase
 - MultiParamTypeClasses
 - PolyKinds
 - RankNTypes
+- RoleAnnotations
 - ScopedTypeVariables
 - StandaloneDeriving
-- TemplateHaskell
 - TypeApplications
 - TypeFamilies
 - TypeOperators
