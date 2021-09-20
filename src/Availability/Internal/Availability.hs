@@ -202,8 +202,9 @@ send = rips @(InTermsOf r m) interpret
 -- (i.e. the underlying monad itself).
 data Underlying :: Effect
 
-instance {-# OVERLAPPING #-} Monad m => Interpret Underlying m where
-  type InTermsOf Underlying m = '[]
+-- | Every monad interprets the 'Underlying' effect in terms of itself, so that @'derive' \@'Underlying'@ is a no-op.
+instance Monad m => Interpret Underlying m where
+  type InTermsOf Underlying m = '[Underlying]
   interpret = \case
 
 -- | Embed the underlying monad @m@ into @'M' m@, given the 'Underlying' pseudo-effect is in the context.

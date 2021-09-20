@@ -75,4 +75,3 @@ default-extensions:
 - TypeFamilies
 - TypeOperators
 - UndecidableInstances
-- UndecidableSuperClasses
