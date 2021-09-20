@@ -1,4 +1,7 @@
 {-# OPTIONS_HADDOCK not-home #-}
+-- | This module is the "core" of Availability's effect system and every definition, whether safe or unsafe, is
+-- exported. You don't typically need to use this module; the "Availability" module re-exports all safe definitions
+-- from here, and is sufficient for most usage.
 module Availability.Internal.Availability where
 
 import           Data.Coerce   (Coercible, coerce)
@@ -14,8 +17,10 @@ import           Unsafe.Coerce (unsafeCoerce)
 -- Specifically, the constructor of 'M' is not exported because 'Data.Coerce.coerce'ing from @m@ to @'M' m@ is
 -- /unsafe w.r.t. effects/. However, coercing from any @'M' m@ to @'M' n@ with @'Data.Coerce.Coercible' m n@ is
 -- generally safe and can be conveniently done via the utility function 'coerceM'.
-newtype M m a = UnsafeLift
-  { unM :: m a -- ^ Unwrap and obtain the inner monad.
+newtype M m a = UnsafeLiftM -- ^ Unsafely lift an @m a@ to @'M' m a@.
+  { unM :: m a
+    -- ^ Unwrap and obtain the inner monad. This is safe, but the function synonym 'runM'' is exported instead for
+    -- documentation clarity.
   } deriving (Functor, Applicative, Monad)
 
 -- | Coerce between underlying monads that are 'Data.Coerce.Coercible' to each other. Practically, this means coercing
@@ -211,7 +216,7 @@ instance Monad m => Interpret Underlying m where
 
 -- | Embed the underlying monad @m@ into @'M' m@, given the 'Underlying' pseudo-effect is in the context.
 underlie :: Eff Underlying => m a -> M m a
-underlie = UnsafeLift
+underlie = UnsafeLiftM
 {-# INLINE underlie #-}
 
 -- * Running effects

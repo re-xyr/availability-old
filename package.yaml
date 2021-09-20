@@ -8,15 +8,15 @@ copyright:           "2021 daylily"
 
 extra-source-files:
 - README.md
+- CHANGELOG.md
 
-# Metadata used when publishing your package
-# synopsis:            Short description of your package
-# category:            Web
+synopsis:            Fast effects for concrete monads
+category:            Control
 
-# To avoid duplicated efforts in documentation and dealing with the
-# complications of embedding Haddock markup inside cabal files, it is
-# common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/re-xyr/availability#readme>
+description: |
+  Efficient effect system that works with concrete monad types, à la the
+  <https://xn--i2r.xn--rhqv96g/2021/09/14/redundant-constraints/ phantom constraint pattern>. Also comes with several 
+  standard effects and convenient combinators for deriving them in the existing ecosystem.
 
 dependencies:
 - base
