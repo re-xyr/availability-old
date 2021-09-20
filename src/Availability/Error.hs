@@ -53,7 +53,7 @@ instance MTL.MonadError e m => Interpret (Thrower e) (ViaMonadError m) where
 instance MTL.MonadError e m => Interpret (Catcher e) (ViaMonadError m) where
   type InTermsOf _ _ = '[Underlying]
   {-# INLINE interpret #-}
-  interpret (CatchError m h) = underlie $ MTL.catchError (runUnderlying @'[Thrower e] m) (runM . h)
+  interpret (CatchError m h) = underlie $ MTL.catchError (runM @'[Thrower e] m) (runM' . h)
 
 newtype ViaMonadThrow m a = ViaMonadThrow (m a)
   deriving (Functor, Applicative, Monad, MonadIO, MTL.MonadThrow)
@@ -69,7 +69,7 @@ newtype ViaMonadCatch m a = ViaMonadCatch (m a)
 instance (Exception e, MTL.MonadCatch m) => Interpret (Catcher e) (ViaMonadCatch m) where
   type InTermsOf _ _ = '[Underlying]
   {-# INLINE interpret #-}
-  interpret (CatchError m h) = underlie $ MTL.catch (runUnderlying @'[Thrower e] m) (runM . h . runException)
+  interpret (CatchError m h) = underlie $ MTL.catch (runM @'[Thrower e] m) (runM' . h . runException)
 
 instance (Interprets '[Thrower e] m, AsAny sel d e) => Interpret (Thrower d) (FromAs sel otag e m) where
   type InTermsOf _ _ = '[Thrower e]

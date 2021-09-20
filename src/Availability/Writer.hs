@@ -39,8 +39,8 @@ instance MTL.MonadWriter w m => Interpret (Teller tag w) (ViaMonadWriter m) wher
 instance MTL.MonadWriter w m => Interpret (Listener tag w) (ViaMonadWriter m) where
   type InTermsOf _ _ = '[Underlying]
   {-# INLINE interpret #-}
-  interpret (Listen m) = underlie $ MTL.listen (runM m)
-  interpret (Pass m)   = underlie $ MTL.pass (runM m)
+  interpret (Listen m) = underlie $ MTL.listen (runM' m)
+  interpret (Pass m)   = underlie $ MTL.pass (runM' m)
 
 newtype TellerByList otag w m a = TellerByList (m a)
   deriving (Functor, Applicative, Monad, MonadIO)

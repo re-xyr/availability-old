@@ -14,7 +14,7 @@ Current effects libraries has one principle of effect restriction: an effect can
 - The effect is implemented for the monad, and
 - The effect constraint `Eff e` is available in the context.
 
-The second requirement decouples the availability of effects from the monad implementation. At last, we use a function `runUnderlying` to clear the constraints and restore the underlying monad. A typical example looks like this:
+The second requirement decouples the availability of effects from the monad implementation. At last, we use a function `runM` to clear the constraints and restore the underlying monad. A typical example looks like this:
 
 ```haskell
 data Ctx = Ctx { foo :: Int, bar :: IORef Bool } deriving (Generic)
@@ -36,10 +36,10 @@ testParity = do
 example :: IO ()
 example = do
     rEven <- newIORef False
-    runUnderlying @'[Getter "foo" Int, Putter "bar" Bool] testParity
+    runM @'[Getter "foo" Int, Putter "bar" Bool] testParity
       & runApp & (`runReaderT` Ctx 2 rEven)
     readIORef rEven >>= print
-    runUnderlying @'[Getter "foo" Int, Putter "bar" Bool] testParity
+    runM @'[Getter "foo" Int, Putter "bar" Bool] testParity
       & runApp & (`runReaderT` Ctx 3 rEven)
     readIORef rEven >>= print
 ```
@@ -125,7 +125,7 @@ echoPure = do
     _  -> writeTTY i >> echoPure
 
 runEchoPure :: [String] -> [String]
-runEchoPure s = runUnderlying @'[Teletype] echoPure
+runEchoPure s = runM @'[Teletype] echoPure
   & runPureProgram & MTL.execWriterT & (`MTL.evalState` s)
 ```
 
@@ -154,13 +154,13 @@ echoIO = do
     _  -> writeTTY i >> echoIO
 
 main :: IO ()
-main = runUnderlying @'[Teletype] echoIO & runImpureProgram
+main = runM @'[Teletype] echoIO & runImpureProgram
 ```
 
 ## Limitations
 
 - Running effects:
-  Because effects in `availability` are detached from the monad structure, they cannot be run on a one-by-one basis. Practically, one can only run all effects and obtain the underlying concrete monad at once via `runUnderlying`. This means there is no exact equivalent to `runReaderT`, `runExceptT` etc on the `M` monad.
+  Because effects in `availability` are detached from the monad structure, they cannot be run on a one-by-one basis. Practically, one can only run all effects and obtain the underlying concrete monad at once via `runM`. This means there is no exact equivalent to `runReaderT`, `runExceptT` etc on the `M` monad.
 
   If your application can entirely run on a single transformer stack (in particular, `ReaderT IO`), this is a non-issue because there will be no need to run effects one-by-one. For some other scenarios, there are some solutions that may be used solve this issue:
 

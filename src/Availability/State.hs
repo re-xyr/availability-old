@@ -132,6 +132,6 @@ instance (MTL.MonadMask m, Interprets '[Getter tag s, Putter tag s, Underlying] 
   interpret (Local f m) = coerceM @m do
     s <- get @tag @s
     underlie $ bracket
-      (runM $ modify @tag f)
-      (const $ runM $ put @tag @s s)
-      (const $ runUnderlying @'[Getter tag s] $ coerceM' @m m)
+      (runM' $ modify @tag f)
+      (const $ runM' $ put @tag @s s)
+      (const $ runM @'[Getter tag s] $ coerceM' @m m)

@@ -74,4 +74,4 @@ instance MTL.MonadReader r m => Interpret (Getter tag r) (ViaMonadReader m) wher
 instance MTL.MonadReader r m => Interpret (Locally tag r) (ViaMonadReader m) where
   type InTermsOf _ _ = '[Underlying]
   {-# INLINE interpret #-}
-  interpret (Local f m) = underlie $ MTL.local f (runUnderlying @'[Getter tag r] m)
+  interpret (Local f m) = underlie $ MTL.local f (runM @'[Getter tag r] m)

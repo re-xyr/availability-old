@@ -31,4 +31,4 @@ newtype ViaMonadUnliftIO m a = ViaMonadUnliftIO (m a)
 instance MonadUnliftIO m => Interpret (Unembed IO) (ViaMonadUnliftIO m) where
   type InTermsOf _ _ = '[Underlying]
   {-# INLINE interpret #-}
-  interpret (WithUnembed f) = underlie $ withRunInIO \unlift -> f (unlift . runM)
+  interpret (WithUnembed f) = underlie $ withRunInIO \unlift -> f (unlift . runM')

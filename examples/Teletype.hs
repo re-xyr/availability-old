@@ -13,6 +13,7 @@ import           Test.Common             (withInput)
 import           Test.Hspec              (Spec, context, it)
 import           Test.QuickCheck         (Testable (property), elements, generate, listOf)
 import           Test.QuickCheck.Monadic (assert, monadicIO, run)
+import           UnliftIO.Concurrent     (threadDelay)
 
 -- Teletype Effect --
 
@@ -52,7 +53,7 @@ echoPure = do
     _  -> writeTTY i >> echoPure
 
 runEchoPure :: [String] -> [String]
-runEchoPure s = runUnderlying @'[Teletype] echoPure & runPureProgram & MTL.execWriterT & (`MTL.evalState` s)
+runEchoPure s = runM @'[Teletype] echoPure & runPureProgram & MTL.execWriterT & (`MTL.evalState` s)
 
 -- Impure echo program --
 
@@ -75,17 +76,20 @@ echoIO = do
     _  -> writeTTY i >> echoIO
 
 main :: IO ()
-main = runUnderlying @'[Teletype] echoIO & runImpureProgram
+main = runM @'[Teletype] echoIO & runImpureProgram
 
 spec :: Spec
 spec = do
   context "echoPure" $
     it "echoes correctly" do
       property \xs -> runEchoPure xs == takeWhile (/= "") xs
-  context "echoIO" $
+  context "echoIO" do
     it "echoes correctly" do
       property $ monadicIO do
         xs <- run $ generate $ listOf $ listOf $ elements ['a'..'z']
         let xs' = filter (not . ('\n' `elem`)) xs ++ [""]
+        run $ threadDelay 10
         out <- run $ capture_ $ main `withInput` unlines xs'
+        run $ print $ takeWhile (/= "") xs'
+        run $ print $ lines out
         assert $ lines out == takeWhile (/= "") xs'

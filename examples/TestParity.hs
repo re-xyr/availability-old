@@ -34,7 +34,7 @@ spec :: Spec
 spec = it "tests parity" do
   property \n -> monadicIO do
     rEven <- run $ newIORef False
-    run $ runUnderlying @'[Getter "foo" Int, Putter "bar" Bool] testParity
+    run $ runM @'[Getter "foo" Int, Putter "bar" Bool] testParity
       & runApp
       & (`runReaderT` Ctx n rEven)
     b <- run $ readIORef rEven

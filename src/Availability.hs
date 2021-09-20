@@ -19,7 +19,7 @@
 -- This pattern is outlined in the blog post [/Effect is a phantom/](https://喵.世界/2021/09/14/redundant-constraints/).
 -- In Availability, the usage of this pattern allows you to control the effect via the phantom 'Eff' constraint, while
 -- using a concrete monad, because the phantom constraint 'Eff' is not tied to the monad. 'Eff' has no instances, and
--- can only be removed all at once, obtaining the underlying monad, via the 'runUnderlying' function:
+-- can only be removed all at once, obtaining the underlying monad, via the 'runM' function:
 --
 -- @
 -- data Ctx = Ctx { foo :: 'Int', bar :: 'Data.IORef.IORef' 'Bool' } deriving ('GHC.Generics.Generic')
@@ -34,7 +34,7 @@
 -- example :: 'IO' ()
 -- example = do
 --   rEven <- 'Data.IORef.newIORef' 'False'
---   'runUnderlying' \@'['Availability.Reader.Getter' "foo" 'Int', 'Availability.State.Putter' "bar" 'Bool'] testParity
+--   'runM' \@'['Availability.Reader.Getter' "foo" 'Int', 'Availability.State.Putter' "bar" 'Bool'] testParity
 --     'Data.Function.&' runApp
 --     'Data.Function.&' (\`'Control.Monad.Reader.runReaderT'\` Ctx 2 rEven)
 --   'Data.IORef.readIORef' rEven '>>=' 'print'
@@ -58,17 +58,17 @@
 -- @
 module Availability
   ( -- * The 'M' monad
-    M (runM), coerceM, coerceM'
+    M, coerceM, coerceM'
   , -- * The phantom 'Eff' constraint
     Effect, Eff, Effs
   , -- * Interpreting effects
-    Interpret (..), Interprets, derive, derives
+    Interpret (..), derive, derives, Interprets
   , -- * Performing effects
-    Sendable, Sendables, send
+    Sendable, send, Sendables
   , -- * The 'Underlying' pseudo-effect
     Underlying, underlie
   , -- * Running effects
-    runUnderlying
+    runM, runM'
   ) where
 
 import           Availability.Internal.Availability

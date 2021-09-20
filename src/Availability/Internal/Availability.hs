@@ -11,15 +11,16 @@ import           Unsafe.Coerce (unsafeCoerce)
 -- | To restrict the effects that can be performed, this monad is used to wrap the concrete monad @m@ everywhere.
 -- Users are therefore screened from directly manipulating the underlying monad @m@.
 --
--- Because of this, 'Data.Coerce.coerce'ing from @m@ to @'M' m@ is /unsafe w.r.t. effects/ and you should not do that.
--- However, coercing from any @'M' m@ to @'M' n@ with @'Data.Coerce.Coercible' m n@ is generally safe.
+-- Specifically, the constructor of 'M' is not exported because 'Data.Coerce.coerce'ing from @m@ to @'M' m@ is
+-- /unsafe w.r.t. effects/. However, coercing from any @'M' m@ to @'M' n@ with @'Data.Coerce.Coercible' m n@ is
+-- generally safe and can be conveniently done via the utility function 'coerceM'.
 newtype M m a = UnsafeLift
-  { runM :: m a -- ^ Unwrap and obtain the inner monad.
+  { unM :: m a -- ^ Unwrap and obtain the inner monad.
   } deriving (Functor, Applicative, Monad)
 
--- | Coerce between underlying monads that are coercible. Practically, this means coercing to and from newtypes over
--- monads. This function is especially useful in creating "interpretation strategies", /i.e./ newtype wrappers
--- that extends a monad with a few instances, intended to be used with @DerivingVia@:
+-- | Coerce between underlying monads that are 'Data.Coerce.Coercible' to each other. Practically, this means coercing
+-- to and from newtypes over monads. This function is especially useful in creating "interpretation strategies", /i.e./
+-- newtype wrappers that extends a monad with a few instances, intended to be used with @DerivingVia@:
 --
 -- @
 -- newtype GetterFromIORef otag m a = GetterFromIORef (m a)
@@ -60,7 +61,7 @@ class Eff' (r :: Effect) where
 -- | A phantom constraint that indicates an effect is available. For any 'Effect' @r@, @'Eff' r@ has to be in the
 -- context in order to 'send' the effect's operations.
 --
--- In all, to perform an effect @r@ (via 'send') on a monad @'M' m@, these two requirements have to be satisfied:
+-- In general, to perform an effect @r@ (via 'send') on a monad @'M' m@, these two requirements have to be satisfied:
 --
 -- - The monad is /capable/ of interpreting the effect, /i.e./ there must be an instance of @'Interpret' r m@,
 -- - The effect is /available/ in current context, /i.e./ @'Eff' r@ must be in current context.
@@ -69,11 +70,6 @@ class Eff' (r :: Effect) where
 -- /phantom constraint pattern/. This pattern is outlined in the blog post
 -- [/Effect is a phantom/](https://喵.世界/2021/09/14/redundant-constraints/).
 type Eff r = Eff' r
-
--- | Convenient constraint alias for @('Eff' r1, ..., 'Eff' rn)@.
-type family Effs (rs :: [Effect]) :: Constraint where
-  Effs '[] = ()
-  Effs (r ': rs) = (Eff r, Effs rs)
 
 -- | Brutally rip off an effect constraint. This function is /very unsafe/, as it can make an effectful action no
 -- longer have an 'Eff' constraint, and you should probably not directly use it in most situations.
@@ -87,6 +83,11 @@ rip m = unsafeCoerce @(UnsafeRipWrapper r a) @(Proxy r -> a) (UnsafeRipWrapper m
 -- | This newtype is basically equal to the type @'Eff' r => a@, except that GHC will be more lenient on this newtype,
 -- necessary for the reflection trick in 'rip'. It doesn't and shouldn't have any other use anyhow.
 newtype UnsafeRipWrapper r a = UnsafeRipWrapper (Eff r => a)
+
+-- | Convenient constraint alias for @('Eff' r1, ..., 'Eff' rn)@.
+type family Effs (rs :: [Effect]) :: Constraint where
+  Effs '[] = ()
+  Effs (r ': rs) = (Eff r, Effs rs)
 
 -- | Typeclass for ripping off many effect constraints at once. This typeclass has instance for every concrete type
 -- level list.
@@ -114,17 +115,13 @@ class (Monad m, Rip (InTermsOf r m)) => Interpret r m where
 
   -- | The more primitive effects that @r@ is interpreted into.
   --
-  -- Eventually, the dependency relation among the effects, formed by 'InTermsOf', should form an acyclic graph
-  -- (DAG). Be careful not to let any cycle occur; in that case GHC will blow up and a cat dies.
+  -- Eventually, the dependency relation among the effects, formed by 'InTermsOf', typically should form an acyclic
+  -- graph (DAG). This may not be true in some situations, most notably the 'Underlying' pseudo-effect; however most
+  -- other effects should follow this principle as it provides convenience for using funcitons like 'derive'.
   type InTermsOf r m :: [Effect]
 
   -- | Interpret an effect @r@ in terms of more primitive effects @'InTermsOf' r m@ in the monad @'M' m@.
   interpret :: Effs (InTermsOf r m) => r m a -> M m a
-
--- | Convenient alias constraint for @('Interpret' x1 m, ..., 'Interpret' xn m)@.
-type family Interprets rs m :: Constraint where
-  Interprets '[] _ = ()
-  Interprets (r ': rs) m = (Interpret r m, Interprets rs m)
 
 -- | Converts the effect constraint @r@ into its underlying effects @'InTermsOf' r m@, so that the effect can be
 -- performed where only the 'Eff' constraints for the underlying effects are in the context:
@@ -140,6 +137,11 @@ type family Interprets rs m :: Constraint where
 derive :: forall r m a. Interpret r m => (Eff r => M m a) -> (Effs (InTermsOf r m) => M m a)
 derive = rip @r
 {-# INLINE derive #-}
+
+-- | Convenient alias constraint for @('Interpret' x1 m, ..., 'Interpret' xn m)@.
+type family Interprets rs m :: Constraint where
+  Interprets '[] _ = ()
+  Interprets (r ': rs) m = (Interpret r m, Interprets rs m)
 
 -- | Type level list concatenation.
 type family xs ++ ys where
@@ -164,11 +166,6 @@ derives = rips @rs
 -- performing an effect 'r' on monad 'm'.
 type Sendable r m = (Eff r, Interpret r m)
 
--- | A convenient alias constraint for @('Sendable r1 m', ..., 'Sendable' rn m)@.
-type family Sendables rs m :: Constraint where
-  Sendables '[] _ = ()
-  Sendables (r ': rs) m = (Sendable r m, Sendables rs m)
-
 -- | Perform an effect in the monad, given the 'Eff' constraint is in the context, and the effect can be interpreted
 -- in terms of the monad. This is the basic way how you do effectful operations.
 --
@@ -180,6 +177,11 @@ type family Sendables rs m :: Constraint where
 send :: forall r m a. Sendable r m => r m a -> M m a
 send = rips @(InTermsOf r m) interpret
 {-# INLINE send #-}
+
+-- | A convenient alias constraint for @('Sendable r1 m', ..., 'Sendable' rn m)@.
+type family Sendables rs m :: Constraint where
+  Sendables '[] _ = ()
+  Sendables (r ': rs) m = (Sendable r m, Sendables rs m)
 
 -- * The 'Underlying' pseudo-effect
 
@@ -219,6 +221,11 @@ underlie = UnsafeLift
 -- In Availability, effects are detached from the underlying monad, which means that /effects imply nothing about/
 -- /the monad structure/. This means that an effectful computation can only be run, or /unwrapped/, into its underlying
 -- monad as a whole.
-runUnderlying :: forall rs m a. Rip rs => ((Effs rs) => M m a) -> m a
-runUnderlying m = runM (rips @rs m)
-{-# INLINE runUnderlying #-}
+runM :: forall rs m a. Rip rs => ((Effs rs) => M m a) -> m a
+runM m = unM (rips @rs m)
+{-# INLINE runM #-}
+
+-- | Unwrap a pure computation into its underlying monad, /i.e./ 'runM' without discarding 'Eff' constraints.
+runM' :: forall m a. M m a -> m a
+runM' = unM
+{-# INLINE runM' #-}
