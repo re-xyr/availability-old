@@ -17,11 +17,8 @@ import           Unsafe.Coerce (unsafeCoerce)
 -- Specifically, the constructor of 'M' is not exported because 'Data.Coerce.coerce'ing from @m@ to @'M' m@ is
 -- /unsafe w.r.t. effects/. However, coercing from any @'M' m@ to @'M' n@ with @'Data.Coerce.Coercible' m n@ is
 -- generally safe and can be conveniently done via the utility function 'coerceM'.
-newtype M m a = UnsafeLiftM -- ^ Unsafely lift an @m a@ to @'M' m a@.
-  { unM :: m a
-    -- ^ Unwrap and obtain the inner monad. This is safe, but the function synonym 'runM'' is exported instead for
-    -- documentation clarity.
-  } deriving (Functor, Applicative, Monad)
+newtype M m a = UnsafeLiftM (m a)-- ^ Unsafely lift an @m a@ to @'M' m a@.
+  deriving (Functor, Applicative, Monad)
 
 -- | Coerce between underlying monads that are 'Data.Coerce.Coercible' to each other. Practically, this means coercing
 -- to and from newtypes over monads. This function is especially useful in creating "interpretation strategies", /i.e./
@@ -183,7 +180,7 @@ send :: forall r m a. Sendable r m => r m a -> M m a
 send = rips @(InTermsOf r m) interpret
 {-# INLINE send #-}
 
--- | A convenient alias constraint for @('Sendable r1 m', ..., 'Sendable' rn m)@.
+-- | A convenient alias constraint for @('Sendable' r1 m, ..., 'Sendable' rn m)@.
 type family Sendables rs m :: Constraint where
   Sendables '[] _ = ()
   Sendables (r ': rs) m = (Sendable r m, Sendables rs m)
@@ -227,10 +224,10 @@ underlie = UnsafeLiftM
 -- /the monad structure/. This means that an effectful computation can only be run, or /unwrapped/, into its underlying
 -- monad as a whole.
 runM :: forall rs m a. Rip rs => ((Effs rs) => M m a) -> m a
-runM m = unM (rips @rs m)
+runM m = let (UnsafeLiftM m') = rips @rs m in m'
 {-# INLINE runM #-}
 
 -- | Unwrap a pure computation into its underlying monad, /i.e./ 'runM' without discarding 'Eff' constraints.
 runM' :: forall m a. M m a -> m a
-runM' = unM
+runM' (UnsafeLiftM m) = m
 {-# INLINE runM' #-}
