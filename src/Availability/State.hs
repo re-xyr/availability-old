@@ -92,41 +92,48 @@ instance MTL.MonadState s m => Interpret (Putter tag s) (ViaMonadState m) where
   {-# INLINE interpret #-}
   interpret (Put x) = underlie $ MTL.put x
 
-newtype StateByIORef otag s m a = StateByIORef (m a)
+newtype StateByIORef otag m a = StateByIORef (m a)
   deriving (Functor, Applicative, Monad, MonadIO)
-deriving instance Interpret (Embed IO) m => Interpret (Embed IO) (StateByIORef otag s m)
+deriving instance Interpret (Embed IO) m => Interpret (Embed IO) (StateByIORef otag m)
 
-instance Interprets '[Getter otag (IORef s), Embed IO] m => Interpret (Getter tag s) (StateByIORef otag s m) where
+instance Interprets '[Getter otag (IORef s), Embed IO] m => Interpret (Getter tag s) (StateByIORef otag m) where
   type InTermsOf _ _ = '[Getter otag (IORef s), Embed IO]
   {-# INLINABLE interpret #-}
   interpret Get = coerceM @m $ do
     r <- get @otag
     embed $ readIORef r
 
-newtype StateByIORef' otag s m a = StateByIORef' (m a)
-  deriving (Functor, Applicative, Monad, MonadIO)
-deriving instance Interpret (Embed IO) m => Interpret (Embed IO) (StateByIORef' otag s m)
-
-instance (Interprets '[Getter otag (IORef s)] m, MonadIO m) => Interpret (Getter tag s) (StateByIORef' otag s m) where
-  type InTermsOf _ _ = '[Getter otag (IORef s), Underlying]
-  {-# INLINABLE interpret #-}
-  interpret Get = coerceM @m $ do
-    r <- get @otag
-    underlie $ liftIO $ readIORef r
-
-instance Interprets '[Getter otag (IORef s), Embed IO] m => Interpret (Putter tag s) (StateByIORef otag s m) where
+instance Interprets '[Getter otag (IORef s), Embed IO] m => Interpret (Putter tag s) (StateByIORef otag m) where
   type InTermsOf _ _ = '[Getter otag (IORef s), Embed IO]
   {-# INLINABLE interpret #-}
   interpret (Put x) = coerceM @m $ do
     r <- get @otag
     embed $ writeIORef r x
 
-newtype LocallyByState tag s m a = LocallyByState (m a)
+newtype StateByIORef' otag m a = StateByIORef' (m a)
+  deriving (Functor, Applicative, Monad, MonadIO)
+deriving instance Interpret (Embed IO) m => Interpret (Embed IO) (StateByIORef' otag m)
+
+instance (Interprets '[Getter otag (IORef s)] m, MonadIO m) => Interpret (Getter tag s) (StateByIORef' otag m) where
+  type InTermsOf _ _ = '[Getter otag (IORef s), Underlying]
+  {-# INLINABLE interpret #-}
+  interpret Get = coerceM @m $ do
+    r <- get @otag
+    underlie $ liftIO $ readIORef r
+
+instance (Interprets '[Getter otag (IORef s)] m, MonadIO m) => Interpret (Putter tag s) (StateByIORef' otag m) where
+  type InTermsOf _ _ = '[Getter otag (IORef s), Underlying]
+  {-# INLINABLE interpret #-}
+  interpret (Put x) = coerceM @m $ do
+    r <- get @otag
+    underlie $ liftIO $ writeIORef r x
+
+newtype LocallyByState tag m a = LocallyByState (m a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
 -- This is not safe + requires MonadMask. You really won't want to do this.
 instance (MTL.MonadMask m, Interprets '[Getter tag s, Putter tag s, Underlying] m) =>
-  Interpret (Locally tag s) (LocallyByState tag s m) where
+  Interpret (Locally tag s) (LocallyByState tag m) where
   type InTermsOf _ _ = '[Getter tag s, Putter tag s, Underlying]
   {-# INLINABLE interpret #-}
   interpret (Local f m) = coerceM @m do

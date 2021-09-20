@@ -26,7 +26,7 @@ newtype App a = App { runApp :: ReaderT Ctx IO a }
   deriving (Interpret (Getter "foo" Int))
     via FromHas "foo" () Ctx (ViaMonadReader App)
   deriving (Interpret (Putter "bar" Bool))
-    via StateByIORef () Bool (FromHas "bar" () Ctx (ViaMonadReader App))
+    via StateByIORef () (FromHas "bar" () Ctx (ViaMonadReader App))
 
 testParity :: (Effs '[Getter "foo" Int, Putter "bar" Bool]) => M App ()
 testParity = do

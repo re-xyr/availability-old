@@ -88,6 +88,4 @@ spec = do
         xs <- run $ generate $ listOf $ listOf $ elements ['a'..'z']
         let xs' = filter (not . ('\n' `elem`)) xs ++ [""]
         out <- run $ capture_ $ main `withInput` unlines xs'
-        run $ print $ takeWhile (/= "") xs'
-        run $ print $ lines out
         assert $ lines out == takeWhile (/= "") xs'

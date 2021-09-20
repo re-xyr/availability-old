@@ -42,19 +42,19 @@ instance MTL.MonadWriter w m => Interpret (Listener tag w) (ViaMonadWriter m) wh
   interpret (Listen m) = underlie $ MTL.listen (runM' m)
   interpret (Pass m)   = underlie $ MTL.pass (runM' m)
 
-newtype TellerByList otag w m a = TellerByList (m a)
+newtype TellerByList otag m a = TellerByList (m a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
-instance Interprets '[Getter otag [w], Putter otag [w]] m => Interpret (Teller tag w) (TellerByList otag w m) where
+instance Interprets '[Getter otag [w], Putter otag [w]] m => Interpret (Teller tag w) (TellerByList otag m) where
   type InTermsOf _ _ = '[Getter otag [w], Putter otag [w]]
   {-# INLINE interpret #-}
   interpret (Tell x) = coerceM @m $ modify' @otag (x :)
 
-newtype TellerByMonoid otag w m a = TellerByMonoid (m a)
+newtype TellerByMonoid otag m a = TellerByMonoid (m a)
   deriving (Functor, Applicative, Monad, MonadIO)
 
 instance (Monoid w, Interprets '[Getter otag w, Putter otag w] m) =>
-  Interpret (Teller tag w) (TellerByMonoid otag w m) where
+  Interpret (Teller tag w) (TellerByMonoid otag m) where
   type InTermsOf _ _ = '[Getter otag w, Putter otag w]
   {-# INLINE interpret #-}
   interpret (Tell x) = coerceM @m $ modify' @otag (<> x)

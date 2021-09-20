@@ -54,7 +54,7 @@
 --   deriving ('Interpret' 'Availability.Reader.Getter' "foo" Int)
 --     via 'Availability.Lens.FromHas' "foo" "ctx" Ctx App
 --   deriving ('Interpret' 'Availability.State.Putter' "bar" Bool)
---     via 'Availability.State.StateByIORef' () Bool ('Availability.Lens.FromHas' "bar" "ctx" Ctx App)
+--     via 'Availability.State.StateByIORef' () ('Availability.Lens.FromHas' "bar" "ctx" Ctx App)
 -- @
 module Availability
   ( -- * The 'M' monad
