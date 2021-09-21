@@ -1,5 +1,5 @@
 module Availability.Error (Thrower (..), throwError, liftEither, Catcher (..), catchError, catchJust, tryError,
-                           ViaMonadError (..), ViaMonadThrow (..), ViaMonadCatch (..)) where
+                           wrapError, ViaMonadError (..), ViaMonadThrow (..), ViaMonadCatch (..)) where
 
 import           Availability
 import           Availability.Lens
@@ -42,6 +42,10 @@ tryError :: forall e m a. Sendable (Catcher e) m => (Eff (Thrower e) => M m a) -
 tryError m = (Right <$> m) `catchError` \e -> pure $ Left e
 {-# INLINE tryError #-}
 
+wrapError :: forall d e m a. (Sendables '[Catcher d, Thrower e] m) => (d -> e) -> (Eff (Thrower d) => M m a) -> M m a
+wrapError f m = m `catchError` \d -> throwError $ f d
+{-# INLINE wrapError #-}
+
 newtype ViaMonadError m a = ViaMonadError (m a)
   deriving (Functor, Applicative, Monad, MonadIO, MTL.MonadError e)
 
@@ -76,11 +80,11 @@ instance (Interprets '[Thrower e] m, AsAny sel d e) => Interpret (Thrower d) (Fr
   {-# INLINE interpret #-}
   interpret (ThrowError d) = coerceM @m $ throwError @e (_As @sel # d)
 
-instance (Interprets '[Catcher e, Thrower e] m, AsAny sel d e) => Interpret (Catcher d) (FromAs sel otag e m) where
-  type InTermsOf _ _ = '[Catcher e, Thrower e]
+instance (Interprets '[Thrower e, Thrower d, Catcher e] m, AsAny sel d e) =>
+  Interpret (Catcher d) (FromAs sel otag e m) where
+  type InTermsOf _ _ = '[Thrower e, Thrower d, Catcher e]
   {-# INLINE interpret #-}
   interpret (CatchError m h) = coerceM @m $
-    (coerceM' @m $ derive @(Thrower d) m) `catchError` \(e :: e) ->
-      case e ^? _As @sel of
-        Nothing -> throwError e
-        Just d  -> coerceM' @m $ h d
+    coerceM' @m m `catchError` \(e :: e) -> case e ^? _As @sel of
+      Nothing -> throwError e
+      Just d  -> coerceM' @m $ h d

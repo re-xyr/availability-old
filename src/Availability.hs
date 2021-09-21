@@ -62,7 +62,7 @@ module Availability
   , -- * The phantom 'Eff' constraint
     Effect, Eff, Effs
   , -- * Interpreting effects
-    Interpret (..), derive, derives, Interprets
+    Interpret (..), Interprets
   , -- * Performing effects
     Sendable, send, Sendables
   , -- * The 'Underlying' pseudo-effect

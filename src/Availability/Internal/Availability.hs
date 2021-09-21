@@ -76,7 +76,7 @@ type Eff r = Eff' r
 -- | Brutally rip off an effect constraint. This function is /very unsafe/, as it can make an effectful action no
 -- longer have an 'Eff' constraint, and you should probably not directly use it in most situations.
 --
--- It is, however, a very primitive building block used in the definition of safe primitives like 'send' and 'derive',
+-- It is, however, a very primitive building block used in the definition of safe primitives like 'send' and 'runM',
 -- and you may use it in building some other safe primitives, but /be very careful/.
 rip :: forall r a. (Eff r => a) -> a
 rip m = unsafeCoerce @(UnsafeRipWrapper r a) @(Proxy r -> a) (UnsafeRipWrapper m) Proxy
@@ -119,26 +119,11 @@ class (Monad m, Rip (InTermsOf r m)) => Interpret r m where
   --
   -- Eventually, the dependency relation among the effects, formed by 'InTermsOf', typically should form an acyclic
   -- graph (DAG). This may not be true in some situations, most notably the 'Underlying' pseudo-effect; however most
-  -- other effects should follow this principle as it provides convenience for using funcitons like 'derive'.
+  -- other effects should follow this principle.
   type InTermsOf r m :: [Effect]
 
   -- | Interpret an effect @r@ in terms of more primitive effects @'InTermsOf' r m@ in the monad @'M' m@.
   interpret :: Effs (InTermsOf r m) => r m a -> M m a
-
--- | Converts the effect constraint @r@ into its underlying effects @'InTermsOf' r m@, so that the effect can be
--- performed where only the 'Eff' constraints for the underlying effects are in the context:
---
--- @
--- instace 'Interpret' ('Availability.Reader.Getter' "myA" A) MyM where
---   type 'InTermsOf' _ _ = '['Availability.Reader.Getter' "refA" ('Data.IORef.IORef' A), 'Availability.Embed.Embed' 'IO']
---   ...
---
--- f :: 'Effs' '['Availability.Reader.Getter' "refA" ('Data.IORef.IORef' A), 'Availability.Embed.Embed' 'IO'] => 'M' MyM A
--- f = 'derive' \@('Availability.Reader.Getter' "myA" A) $ 'Availability.Reader.get' \@"myA"
--- @
-derive :: forall r m a. Interpret r m => (Eff r => M m a) -> (Effs (InTermsOf r m) => M m a)
-derive = rip @r
-{-# INLINE derive #-}
 
 -- | Convenient alias constraint for @('Interpret' x1 m, ..., 'Interpret' xn m)@.
 type family Interprets rs m :: Constraint where
@@ -154,13 +139,6 @@ type family xs ++ ys where
 type family InTermsOfs rs m where
   InTermsOfs '[] m = '[]
   InTermsOfs (r ': rs) m = InTermsOf r m ++ InTermsOfs rs m
-
--- | Converts multiple effects @rs@ into their underlying effects @'InTermsOfs' rs m@, so that the effects can be
--- performed where only the 'Eff' constraints for the underlying effects are in the context. See 'derive' for the
--- single-effect version.
-derives :: forall rs m a. (Rip rs, Interprets rs m) => (Effs rs => M m a) -> (Effs (InTermsOfs rs m) => M m a)
-derives = rips @rs
-{-# INLINE derives #-}
 
 -- * Performing effects
 
