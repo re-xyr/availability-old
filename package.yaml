@@ -51,10 +51,12 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - availability
+    - containers
     - hspec
     - QuickCheck
     - silently
     - temporary
+    - text
     default-extensions:
     - DeriveGeneric
 

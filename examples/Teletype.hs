@@ -8,11 +8,10 @@ import qualified Control.Monad.State     as MTL
 import           Control.Monad.Trans     (MonadIO)
 import qualified Control.Monad.Writer    as MTL
 import           Data.Function           ((&))
-import           System.IO.Silently      (capture_)
-import           Test.Common             (withInput)
+import           Test.Common             (assertPrints, withInput)
 import           Test.Hspec              (Spec, context, it)
 import           Test.QuickCheck         (Testable (property), elements, generate, listOf)
-import           Test.QuickCheck.Monadic (assert, monadicIO, run)
+import           Test.QuickCheck.Monadic (monadicIO, run)
 
 -- Teletype Effect --
 
@@ -87,5 +86,5 @@ spec = do
       property $ monadicIO do
         xs <- run $ generate $ listOf $ listOf $ elements ['a'..'z']
         let xs' = filter (not . ('\n' `elem`)) xs ++ [""]
-        out <- run $ capture_ $ main `withInput` unlines xs'
-        assert $ lines out == takeWhile (/= "") xs'
+        main `withInput` unlines xs'
+          `assertPrints` unlines (takeWhile (/= "") xs')
