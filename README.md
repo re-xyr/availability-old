@@ -1,3 +1,5 @@
+> **WARNING** - this project is obsolete and this repository serves as a historical artifact. This project is not in a usable state. See [`avail`](https://github.com/re-xyr/avail) for newest progress on the phantom constraint pattern.
+
 # availability
 
 `availability` is an unconventional effects library. It lets user provide a fixed concrete monad for all effectful functions in an application, and attach effects to the monads in an easy way.
@@ -52,25 +54,25 @@ example = do
 
 This benchmark interprets multiple layers of no-op effects. `availability` performed almost identical to `mtl`. This is because I used `mtl` to build the underlying monad.
 
-![big-stack benchmark result](https://raw.githubusercontent.com/re-xyr/availability/master/docs/img/big-stack.png)
+![big-stack benchmark result](https://raw.githubusercontent.com/re-xyr/availability-old/master/docs/img/big-stack.png)
 
 ### `countdown`
 
 This benchmark decrements a counter till 0. `availability` performed identical to reference implementation due to GHC optimization, even after separating effect implementations and the program.
 
-![countdown benchmark result](https://raw.githubusercontent.com/re-xyr/availability/master/docs/img/countdown.png)
+![countdown benchmark result](https://raw.githubusercontent.com/re-xyr/availability-old/master/docs/img/countdown.png)
 
 ### `file-sizes`
 
 This benchmark tests a typical practical scenario of reading files and logging. `availability` has slightly worse performance than `mtl` and slightly better than `fused-effects`.
 
-![file-sizes benchmark result](https://raw.githubusercontent.com/re-xyr/availability/master/docs/img/file-sizes.png)
+![file-sizes benchmark result](https://raw.githubusercontent.com/re-xyr/availability-old/master/docs/img/file-sizes.png)
 
 ### `reinterpretation`
 
 This benchmark involves reinterpreting higher level effects to more primitive ones. `availability` performed better than other libraries.
 
-![reinterpretation benchmark result](https://raw.githubusercontent.com/re-xyr/availability/master/docs/img/reinterpretation.png)
+![reinterpretation benchmark result](https://raw.githubusercontent.com/re-xyr/availability-old/master/docs/img/reinterpretation.png)
 
 ## Example
 
@@ -137,7 +139,7 @@ import           Availability
 
 newtype ImpureProgram a = ImpureProgram { runImpureProgram :: IO a }
   deriving (Functor, Applicative, Monad, MonadIO)
-  deriving (Interpret (Embed IO)) 
+  deriving (Interpret (Embed IO))
     via ViaMonadIO ImpureProgram
 
 instance Interpret Teletype ImpureProgram where
